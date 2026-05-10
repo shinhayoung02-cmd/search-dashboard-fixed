@@ -1,0 +1,28 @@
+{
+  "name": "search-dashboard",
+  "version": "0.1.0",
+  "private": true,
+"scripts": {
+  "dev": "next dev --webpack",
+  "build": "next build --webpack",
+  "start": "next start",
+  "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+  "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
+  "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+},
+  "dependencies": {
+    "@opennextjs/cloudflare": "^1.19.6",
+    "@supabase/supabase-js": "^2.39.7",
+    "axios": "^1.6.8",
+    "next": "^16.2.4",
+    "openai": "^4.47.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.1",
+    "wrangler": "^4.87.0"
+  }
+}

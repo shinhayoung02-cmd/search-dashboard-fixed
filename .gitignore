@@ -1,0 +1,10 @@
+.env
+.env.local
+.env.production
+.env.*
+.dev.vars
+
+.open-next/
+.next/
+node_modules/
+.wrangler/
