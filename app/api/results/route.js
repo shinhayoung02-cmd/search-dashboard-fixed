@@ -19,7 +19,7 @@ export async function GET(request) {
       .range(from, to)
 
     if (keyword) {
-      q = q.ilike('keyword', `%${keyword}%`)
+      q = q.or(`keyword.ilike.%${keyword}%,title.ilike.%${keyword}%,detail_body.ilike.%${keyword}%,description.ilike.%${keyword}%`)
     }
 
     const { data, error, count } = await q
@@ -28,9 +28,19 @@ export async function GET(request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // ✅ results 없어도 queries fallback 없이 빈 배열만 반환
+    const normalized = (data || []).map((item) => ({
+      ...item,
+      source: item.source || item.site || '',
+      site: item.site || item.source || '',
+      snippet: item.snippet || item.description || '',
+      image_url: item.image_url || item.thumbnail || '',
+      thumbnail: item.thumbnail || item.image_url || '',
+      detail_body: item.detail_body || '',
+      crawl_status: item.crawl_status || 'unknown',
+    }))
+
     return NextResponse.json({
-      results: data || [],
+      results: normalized,
       total: count || 0,
       page,
       pageSize,

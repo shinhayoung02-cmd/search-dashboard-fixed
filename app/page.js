@@ -16,10 +16,30 @@ async function readJsonResponse(res) {
   }
 
   if (!res.ok) {
-    throw new Error(data.error || `API 요청 실패: ${res.status}`)
+    throw new Error(data.error || data.message || `API 요청 실패: ${res.status}`)
   }
 
   return data
+}
+
+function buildCrawlMessage(data) {
+  const processedCount = data.processed?.length || 0
+  const failedCount = data.failed?.length || 0
+
+  if (data.stopped && data.stop_reason === 'GOOGLE_API_429') {
+    return 'Google Search API 할당량이 초과되었습니다. 오늘은 자동 검색 대신 직접 URL 크롤링을 쓰거나 내일 다시 시도하세요.'
+  }
+
+  if (data.stopped) {
+    return data.message || `수집이 중단되었습니다: ${data.stop_reason || 'UNKNOWN'}`
+  }
+
+  if (processedCount > 0) {
+    const saved = data.processed.reduce((sum, item) => sum + (item.saved_count || 0), 0)
+    return `처리 완료: ${processedCount}개 키워드 / 저장: ${saved}개 URL / 실패: ${failedCount}개`
+  }
+
+  return data.message || `처리된 키워드가 없습니다. 실패: ${failedCount}개`
 }
 
 export default function Home() {
@@ -57,7 +77,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchResults(keyword, page)
-  }, [page])
+  }, [page, fetchResults, keyword])
 
   const handleSearch = (kw) => {
     setKeyword(kw)
@@ -71,17 +91,16 @@ export default function Home() {
     setErrorMessage('')
 
     try {
-      const res = await fetch('/api/crawl', { method: 'POST' })
+      const res = await fetch('/api/crawl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 3 }),
+      })
       const data = await readJsonResponse(res)
+      setMessage(buildCrawlMessage(data))
 
-      const processedCount = data.processed?.length || 0
-      const failedCount = data.failed?.length || 0
-
-      if (processedCount > 0) {
-        setMessage(`처리 완료: ${processedCount}개 키워드 / 실패: ${failedCount}개`)
+      if ((data.processed?.length || 0) > 0) {
         fetchResults(keyword, 1)
-      } else {
-        setMessage(data.message || `처리된 키워드가 없습니다. 실패: ${failedCount}개`)
       }
     } catch (err) {
       console.error('[handleCrawl] error:', err)
@@ -115,7 +134,7 @@ export default function Home() {
         </div>
 
         {message && (
-          <div className="mb-4 px-4 py-2 bg-white rounded-xl shadow text-sm text-gray-700 border-l-4 border-indigo-400">
+          <div className="mb-4 px-4 py-2 bg-white rounded-xl shadow text-sm text-gray-700 border-l-4 border-indigo-400 whitespace-pre-wrap">
             {message}
           </div>
         )}
