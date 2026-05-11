@@ -124,7 +124,7 @@ export default function Home() {
   const [dbLoading, setDbLoading] = useState(false)
 
   const [candidateQuery, setCandidateQuery] = useState('')
-  const [candidateLimit, setCandidateLimit] = useState(10)
+  const [candidateLimit, setCandidateLimit] = useState(100)
   const [candidateLoading, setCandidateLoading] = useState(false)
   const [candidates, setCandidates] = useState([])
   const [selectedUrls, setSelectedUrls] = useState([])
@@ -182,36 +182,36 @@ export default function Home() {
   }
 
   const fetchDbQueries = async () => {
-    setDbLoading(true)
-    setMessage('')
-    setErrorMessage('')
+  setDbLoading(true)
+  setMessage('')
+  setErrorMessage('')
 
-    try {
-      const res = await fetch('/api/representative-queries?limit=100')
-      const data = await readJsonResponse(res)
+  try {
+    const res = await fetch('/api/db-queries?limit=1000')
+    const data = await readJsonResponse(res)
 
-      if (!data.ok) {
-        throw new Error(data.error || '대표 쿼리를 불러오지 못했습니다.')
-      }
-
-      const rows = data.queries || []
-      setDbQueries(rows)
-
-      const firstQuery = rows.map(pickDbQueryText).find(Boolean)
-
-      if (firstQuery) {
-        setCandidateQuery(firstQuery)
-      }
-
-      setMessage(
-        `대표 쿼리 ${rows.length}개를 불러왔습니다. 첫 번째 쿼리를 단일 입력창에 적용했습니다.`
-      )
-    } catch (err) {
-      setErrorMessage(err.message || '대표 쿼리를 불러오지 못했습니다.')
-    } finally {
-      setDbLoading(false)
+    if (!data.ok) {
+      throw new Error(data.error || 'DB 쿼리를 불러오지 못했습니다.')
     }
+
+    const rows = data.queries || []
+    setDbQueries(rows)
+
+    const firstQuery = rows.map(pickDbQueryText).find(Boolean)
+
+    if (firstQuery) {
+      setCandidateQuery(firstQuery)
+    }
+
+    setMessage(
+      `정보찾아줌 DB 쿼리 ${rows.length}개를 불러왔습니다. 첫 번째 쿼리를 단일 입력창에 적용했습니다.`
+    )
+  } catch (err) {
+    setErrorMessage(err.message || 'DB 쿼리를 불러오지 못했습니다.')
+  } finally {
+    setDbLoading(false)
   }
+}
 
   const handleNormalizeQueries = async () => {
     setNormalizing(true)
@@ -417,7 +417,7 @@ export default function Home() {
                   disabled={dbLoading}
                   className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  {dbLoading ? '불러오는 중...' : 'DB 쿼리 불러오기'}
+                  {dbLoading ? '불러오는 중...' : 'JEONGBOCHAJAJUM 쿼리 불러오기'}
                 </button>
 
                 <button
@@ -456,7 +456,7 @@ export default function Home() {
                 <input
                   type="number"
                   min="1"
-                  max="30"
+                  max="100"
                   value={batchUrlLimit}
                   onChange={(e) => setBatchUrlLimit(e.target.value)}
                   className="mt-1 block w-32 rounded-xl border px-3 py-2"
@@ -520,7 +520,7 @@ export default function Home() {
             {dbQueries.length > 0 && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-bold text-gray-800">대표 쿼리 목록</p>
+                  <p className="text-sm font-bold text-gray-800">JEONGBOCHAJAJUM DB 쿼리 목록</p>
                   <p className="text-xs text-gray-500">
                     클릭하면 단일 쿼리 입력창에 적용됩니다.
                   </p>
