@@ -43,37 +43,31 @@ const SITE_META = {
   daangn: {
     label: '당근',
     sub: '당근 동네생활',
-    emoji: '🥕',
     headerClass: 'border-orange-200',
   },
   naverCafe: {
     label: '네이버 카페',
     sub: '네이버 카페 게시글',
-    emoji: '🟢',
     headerClass: 'border-green-200',
   },
   clien: {
     label: '클리앙',
     sub: '커뮤니티 게시글',
-    emoji: '💬',
     headerClass: 'border-blue-200',
   },
   joongna: {
     label: '중고나라',
     sub: '중고거래 게시글',
-    emoji: '📦',
     headerClass: 'border-yellow-200',
   },
   bunjang: {
     label: '번개장터',
     sub: '거래 게시글',
-    emoji: '⚡',
     headerClass: 'border-purple-200',
   },
   etc: {
     label: '기타',
     sub: '기타 웹 결과',
-    emoji: '🌐',
     headerClass: 'border-gray-200',
   },
 }
@@ -462,13 +456,13 @@ export default function Home() {
           <div className="space-y-12">
             {groupedResults.map((group) => (
               <section key={group.key} className="space-y-4">
-                <div className={`flex items-end justify-between border-b pb-3 ${group.meta.headerClass}`}>
+                <div className={`flex items-end justify-between border-b pb-2 w-[60%] min-w-[760px] ${group.meta.headerClass}`}>
                   <div>
-                    <h2 className="text-2xl font-extrabold text-gray-900">
-                      {group.meta.emoji} {group.meta.label}
+                    <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">
+                     {group.meta.label}
                     </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {group.meta.sub}
+                    <p className="text-xs text-gray-500 mt-1">
+                     {group.meta.sub}
                     </p>
                   </div>
 
@@ -477,7 +471,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 w-[60%] min-w-[760px]">
                   {group.items.map((item) => (
                     <ResultCard
                       key={item.id || item.url}

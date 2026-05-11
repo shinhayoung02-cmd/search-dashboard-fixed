@@ -17,6 +17,7 @@ export default function ResultCard({ item }) {
 
   const isBrokenText = (value = '') => {
     const text = String(value)
+
     return (
       !text ||
       text.includes('����') ||
@@ -64,9 +65,9 @@ export default function ResultCard({ item }) {
 
     try {
       const decoded = decodeURIComponent(displayUrl)
-      return decoded.length > 72 ? decoded.slice(0, 72) + '…' : decoded
+      return decoded.length > 82 ? decoded.slice(0, 82) + '…' : decoded
     } catch {
-      return displayUrl.length > 72 ? displayUrl.slice(0, 72) + '…' : displayUrl
+      return displayUrl.length > 82 ? displayUrl.slice(0, 82) + '…' : displayUrl
     }
   })()
 
@@ -110,6 +111,7 @@ export default function ResultCard({ item }) {
 
   const detectLocation = (text = '') => {
     const t = cleanText(text)
+
     return (
       t.match(/[가-힣A-Za-z0-9]+역/)?.[0] ||
       t.match(/[가-힣A-Za-z0-9]+터미널/)?.[0] ||
@@ -156,6 +158,7 @@ export default function ResultCard({ item }) {
     if (t.includes('편의점')) return '편의점'
     if (t.includes('공항')) return '공항'
     if (t.includes('역')) return '역 주변'
+
     return ''
   }
 
@@ -171,6 +174,7 @@ export default function ResultCard({ item }) {
     if (t.includes('기사')) return '기사님'
     if (t.includes('경찰')) return '경찰 신고'
     if (t.includes('지구대')) return '지구대'
+
     return ''
   }
 
@@ -182,6 +186,7 @@ export default function ResultCard({ item }) {
     if (t.includes('연락')) return '연락 요청'
     if (t.includes('보관')) return '보관 여부 확인'
     if (t.includes('도와')) return '도움 요청'
+
     return '확인 요청'
   }
 
@@ -197,14 +202,14 @@ export default function ResultCard({ item }) {
 
     if (!cleanedBody) {
       if (item.crawl_status === 'blocked') {
-        return '본문 접근이 제한된 게시글로, 원본 링크에서 직접 확인이 필요함.'
+        return '본문 접근이 제한된 게시글로, 원본 링크 확인이 필요함.'
       }
 
       if (item.crawl_status === 'search_only') {
-        return '본문 접근이 제한되어 검색 결과 제목과 요약을 기준으로 확인이 필요함.'
+        return '본문 접근이 제한되어 검색 결과 제목과 요약 기준으로 확인이 필요함.'
       }
 
-      return '본문 수집 결과가 없어 원본 링크에서 직접 확인이 필요함.'
+      return '본문 수집 결과가 없어 원본 링크 확인이 필요함.'
     }
 
     const fullText = `${title} ${cleanedBody}`
@@ -215,7 +220,6 @@ export default function ResultCard({ item }) {
     const clue = detectClue(fullText)
     const action = detectAction(fullText)
 
-    // 상황형 템플릿: 분실/습득 맥락을 한 줄로 정리
     if (
       fullText.includes('분실') ||
       fullText.includes('잃어') ||
@@ -229,21 +233,18 @@ export default function ResultCard({ item }) {
           ? `${placeType} 이용 중`
           : '이동 중'
 
-      const cluePart = clue
-        ? `${clue}를 단서로 `
-        : ''
+      const cluePart = clue ? `${clue}를 단서로 ` : ''
 
       return `${wherePart} ${object}를 두고 내렸거나 분실한 상황이며, ${cluePart}${action}을 위해 글을 작성함.`
     }
 
-    // 습득 맥락
     if (fullText.includes('주웠') || fullText.includes('습득') || fullText.includes('보관')) {
       const wherePart = location ? `${location}에서` : placeType ? `${placeType}에서` : '현장에서'
       return `${wherePart} ${object}를 습득하거나 보관 중이며, 주인 확인 또는 연락을 요청함.`
     }
 
-    // 기본 문장 압축
     const sentences = splitSentences(cleanedBody)
+
     const importantWords = [
       '분실',
       '잃어',
@@ -377,12 +378,13 @@ export default function ResultCard({ item }) {
       if (stopwords.has(token)) continue
       if (picked.includes(token)) continue
       if (token.length < 2) continue
+
       counts[token] = (counts[token] || 0) + 1
     }
 
     const extra = Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+      .slice(0, 4)
       .map(([word]) => word)
 
     return [...picked, ...extra].slice(0, 5)
@@ -394,19 +396,20 @@ export default function ResultCard({ item }) {
   const keywordList = extractKeywords(keywordSource)
 
   return (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm w-full">      <div className="space-y-4">
-        <div>
-          <div className="text-[13px] font-semibold text-orange-500 mb-1">
-            🗓 날짜
+    <article className="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm w-full">
+      <div className="space-y-3">
+        <div className="grid grid-cols-[72px_1fr] gap-3 items-start">
+          <div className="text-[12px] font-bold text-orange-500">
+            날짜
           </div>
-          <div className="text-gray-800 text-[15px]">
+          <div className="text-gray-800 text-[13px] leading-5">
             {displayDate}
           </div>
         </div>
 
-        <div>
-          <div className="text-[13px] font-semibold text-orange-500 mb-1">
-            🔗 링크
+        <div className="grid grid-cols-[72px_1fr] gap-3 items-start">
+          <div className="text-[12px] font-bold text-orange-500">
+            링크
           </div>
 
           {displayUrl ? (
@@ -414,60 +417,60 @@ export default function ResultCard({ item }) {
               href={displayUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-500 text-[14px] leading-6 break-all hover:underline"
+              className="text-gray-500 text-[12px] leading-5 break-all hover:underline"
               title={displayUrl}
             >
               {shortUrl}
             </a>
           ) : (
-            <div className="text-gray-400 text-[14px]">
+            <div className="text-gray-400 text-[12px]">
               링크 없음
             </div>
           )}
         </div>
 
-        <div>
-          <div className="text-[13px] font-semibold text-orange-500 mb-1">
-            📝 제목
+        <div className="grid grid-cols-[72px_1fr] gap-3 items-start pt-1">
+          <div className="text-[12px] font-bold text-orange-500">
+            제목
           </div>
-          <h3 className="text-gray-950 text-[18px] leading-7 font-extrabold">
+          <h3 className="text-gray-950 text-[15px] leading-6 font-extrabold">
             {displayTitle}
           </h3>
         </div>
 
-        <div className="pt-1">
-          <div className="text-[22px] font-extrabold text-orange-500 mb-2">
-            📄 Contents
+        <div className="border-t border-gray-100 pt-3">
+          <div className="text-[13px] font-extrabold text-orange-500 mb-1">
+            Contents
           </div>
 
-          <p className="text-gray-950 text-[16px] leading-7 font-semibold">
+          <p className="text-gray-900 text-[14px] leading-6 font-semibold">
             {displaySummary}
           </p>
         </div>
 
-        <div>
-          <div className="text-[13px] font-semibold text-orange-500 mb-2">
-            🏷 키워드
+        <div className="border-t border-gray-100 pt-3">
+          <div className="text-[12px] font-bold text-orange-500 mb-2">
+            키워드
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {keywordList.length > 0 ? (
               keywordList.map((kw, idx) => (
                 <span
                   key={idx}
-                  className="px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 text-[13px] font-medium"
+                  className="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-[11px] font-semibold"
                 >
                   #{kw}
                 </span>
               ))
             ) : (
-              <span className="text-gray-400 text-[13px]">
+              <span className="text-gray-400 text-[12px]">
                 키워드 없음
               </span>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </article>
   )
 }
