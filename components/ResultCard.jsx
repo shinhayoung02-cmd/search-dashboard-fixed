@@ -32,7 +32,9 @@ export default function ResultCard({ item }) {
     try {
       const raw = String(value).trim()
 
-      // 이미 YYYY-MM-DD 형식이면 그대로 사용
+      const relativeMatch = raw.match(/(\d+)\s*(분|시간|일|주|개월|년)\s*전/)
+      if (relativeMatch) return raw
+
       const dateMatch = raw.match(/\d{4}[-.]\d{1,2}[-.]\d{1,2}/)
       if (dateMatch) {
         return dateMatch[0].replace(/\./g, '-')
@@ -70,7 +72,7 @@ export default function ResultCard({ item }) {
   ]
 
   const displayTitle =
-    titleCandidates.find((text) => text && !isBrokenText(text)) || ''
+    cleanText(titleCandidates.find((text) => text && !isBrokenText(text)) || '제목 없음')
 
   const bodyCandidates = [
     item.summary,
@@ -86,7 +88,16 @@ export default function ResultCard({ item }) {
   const rawBody =
     bodyCandidates.find((text) => text && !isBrokenText(text)) || ''
 
-  const sourceText = cleanText(`${displayTitle} ${rawBody}`)
+  const bodyText = cleanText(rawBody)
+
+  const removeTitleFromBody = (body, title) => {
+    if (!body || !title) return body
+
+    return body
+      .replace(title, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
 
   const isJunkSentence = (sentence = '') => {
     const s = sentence.trim()
@@ -100,10 +111,7 @@ export default function ResultCard({ item }) {
       /^혹시/,
       /^제가/,
       /^저는/,
-      /^오늘/,
-      /^어제/,
       /^사진/,
-      /^나와있는/,
       /^문의/,
       /^댓글/,
       /^당근/,
@@ -127,7 +135,6 @@ export default function ResultCard({ item }) {
     '분실물',
     '유실물',
     '잃어버',
-    '잃어',
     '놓고',
     '두고',
     '습득',
@@ -148,6 +155,7 @@ export default function ResultCard({ item }) {
     '아이폰',
     '에어팟',
     '가방',
+    '캐리어',
     '위치추적',
     '기기정지',
     '개인정보',
@@ -157,10 +165,10 @@ export default function ResultCard({ item }) {
     '주인',
   ]
 
-  const makeOneLineSummary = (text = '') => {
-    const cleaned = cleanText(text)
+  const makeOneLineSummary = (body = '', title = '') => {
+    const cleanedBody = cleanText(removeTitleFromBody(body, title))
 
-    if (!cleaned) {
+    if (!cleanedBody) {
       if (item.crawl_status === 'blocked') {
         return '본문 접근이 제한된 게시글입니다. 원본 링크에서 직접 확인이 필요합니다.'
       }
@@ -169,27 +177,29 @@ export default function ResultCard({ item }) {
         return '본문 접근이 제한되어 검색 결과 제목과 요약을 기준으로 표시합니다.'
       }
 
-      return '내용 없음'
+      return '본문 수집 결과가 없어 원본 링크에서 직접 확인이 필요합니다.'
     }
 
-    const sentences = cleaned
+    const sentences = cleanedBody
       .split(/[\n\r]+|[.!?。！？]+|다\s+/)
       .map((s) => cleanText(s))
       .filter((s) => !isJunkSentence(s))
 
-    const importantSentence =
-      sentences.find((s) => importantWords.some((word) => s.includes(word))) ||
-      sentences[0] ||
-      cleaned
+    const importantSentences = sentences
+      .filter((s) => importantWords.some((word) => s.includes(word)))
+      .slice(0, 2)
 
-    const sentence = cleanText(importantSentence)
+    const summarySource =
+      importantSentences.length > 0
+        ? importantSentences.join(', ')
+        : sentences.slice(0, 2).join(', ') || cleanedBody
 
-    if (!sentence) return '내용 없음'
+    const normalized = summarySource.endsWith('다')
+      ? summarySource
+      : `${summarySource}다`
 
-    const normalized = sentence.endsWith('다') ? sentence : `${sentence}다`
-
-    return normalized.length > 120
-      ? normalized.slice(0, 120) + '…'
+    return normalized.length > 130
+      ? normalized.slice(0, 130) + '…'
       : normalized
   }
 
@@ -215,6 +225,7 @@ export default function ResultCard({ item }) {
       '아이폰',
       '에어팟',
       '가방',
+      '캐리어',
       '위치추적',
       '기기정지',
       '개인정보',
@@ -240,7 +251,6 @@ export default function ResultCard({ item }) {
       '혹시',
       '사진들에',
       '나와있는',
-      '택시에',
       '제가',
       '저는',
       '오늘',
@@ -269,6 +279,9 @@ export default function ResultCard({ item }) {
       '필요합니다',
       '생활',
       '정보',
+      '무엇을',
+      '의미하나요',
+      '스티커',
     ])
 
     const tokens = cleaned.match(/[가-힣A-Za-z0-9]{2,}/g) || []
@@ -290,9 +303,8 @@ export default function ResultCard({ item }) {
     return [...picked, ...extra].slice(0, 5)
   }
 
-  // 중요:
-  // created_at / updated_at은 "DB 저장 날짜"라서 제외합니다.
-  // 여기에는 원본 게시물 날짜만 들어와야 합니다.
+  // created_at / updated_at은 DB 저장일이라 사용하지 않습니다.
+  // published_at, post_date, article_date, date만 원본 게시물 날짜로 봅니다.
   const displayDate = formatPostDate(
     item.published_at ||
     item.post_date ||
@@ -300,8 +312,10 @@ export default function ResultCard({ item }) {
     item.date
   )
 
-  const displaySummary = makeOneLineSummary(sourceText)
-  const keywordList = extractKeywords(sourceText)
+  const displaySummary = makeOneLineSummary(bodyText, displayTitle)
+
+  const keywordSource = `${displayTitle} ${bodyText}`
+  const keywordList = extractKeywords(keywordSource)
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
@@ -335,6 +349,15 @@ export default function ResultCard({ item }) {
               링크 없음
             </div>
           )}
+        </div>
+
+        <div>
+          <div className="text-sm font-semibold text-orange-500 mb-1">
+            📝 제목
+          </div>
+          <h3 className="text-gray-900 text-[22px] leading-8 font-extrabold">
+            {displayTitle}
+          </h3>
         </div>
 
         <div>
