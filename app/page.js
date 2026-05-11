@@ -481,6 +481,24 @@ export default function Home() {
           <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm">
   <div className="flex flex-col gap-4">
 
+    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+  <div>
+    <h2 className="text-lg font-extrabold text-slate-900">사용법</h2>
+    <p className="mt-1 text-sm leading-6 text-slate-600">
+      정보찾아줌에서 쿼리를 생성한 뒤, 이 검색 대시보드에서 URL 후보 수집과 본문 수집을 진행합니다.
+    </p>
+  </div>
+
+  <a
+    href="https://jeongbochajajum.pages.dev/"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700"
+  >
+    정보찾아줌 바로가기
+  </a>
+</div>
+
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
       <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
         <p className="text-xs font-bold text-indigo-500">STEP 1</p>
