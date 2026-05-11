@@ -19,21 +19,25 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
 
+    const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.max(
       1,
-      Math.min(Number(searchParams.get('limit') || 500), 2000)
+      Math.min(Number(searchParams.get('limit') || 1000), 1000)
     )
 
     const source = searchParams.get('source') || 'jeongbochajajum_supabase_save'
     const status = searchParams.get('status') || ''
 
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+
     const supabase = getSupabaseAdmin()
 
     let q = supabase
       .from('queries')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
-      .limit(limit)
+      .range(from, to)
 
     if (source !== 'all') {
       q = q.eq('source', source)
@@ -43,7 +47,7 @@ export async function GET(request) {
       q = q.eq('candidate_status', status)
     }
 
-    const { data, error } = await q
+    const { data, error, count } = await q
 
     if (error) {
       return NextResponse.json(
@@ -63,9 +67,20 @@ export async function GET(request) {
       }))
       .filter((row) => row.display_query)
 
+    const total = count || 0
+    const totalPages = Math.max(1, Math.ceil(total / limit))
+
     return NextResponse.json({
       ok: true,
       source_table: 'queries',
+      page,
+      limit,
+      from,
+      to,
+      total,
+      totalPages,
+      hasPrev: page > 1,
+      hasNext: page < totalPages,
       count: rows.length,
       queries: rows,
     })

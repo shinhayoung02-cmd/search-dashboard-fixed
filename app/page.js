@@ -123,6 +123,11 @@ export default function Home() {
   const [dbQueries, setDbQueries] = useState([])
   const [dbLoading, setDbLoading] = useState(false)
 
+  const [dbQueryPage, setDbQueryPage] = useState(1)
+  const [dbQueryTotal, setDbQueryTotal] = useState(0)
+  const [dbQueryTotalPages, setDbQueryTotalPages] = useState(1)
+  const DB_QUERY_PAGE_SIZE = 1000
+
   const [candidateQuery, setCandidateQuery] = useState('')
   const [candidateLimit, setCandidateLimit] = useState(100)
   const [candidateLoading, setCandidateLoading] = useState(false)
@@ -181,13 +186,20 @@ export default function Home() {
     fetchResults(kw, 1)
   }
 
-  const fetchDbQueries = async () => {
+  const fetchDbQueries = async (pageToLoad = 1) => {
   setDbLoading(true)
   setMessage('')
   setErrorMessage('')
 
   try {
-    const res = await fetch('/api/db-queries?limit=1000')
+    const safePage = Math.max(1, Number(pageToLoad || 1))
+
+    const params = new URLSearchParams({
+      limit: String(DB_QUERY_PAGE_SIZE),
+      page: String(safePage),
+    })
+
+    const res = await fetch(`/api/db-queries?${params.toString()}`)
     const data = await readJsonResponse(res)
 
     if (!data.ok) {
@@ -197,6 +209,10 @@ export default function Home() {
     const rows = data.queries || []
     setDbQueries(rows)
 
+    setDbQueryPage(data.page || safePage)
+    setDbQueryTotal(data.total || 0)
+    setDbQueryTotalPages(data.totalPages || 1)
+
     const firstQuery = rows.map(pickDbQueryText).find(Boolean)
 
     if (firstQuery) {
@@ -204,14 +220,15 @@ export default function Home() {
     }
 
     setMessage(
-      `정보찾아줌 DB 쿼리 ${rows.length}개를 불러왔습니다. 첫 번째 쿼리를 단일 입력창에 적용했습니다.`
+      `정보찾아줌 DB 쿼리 ${rows.length}개를 불러왔습니다. ` +
+        `현재 ${data.page || safePage}/${data.totalPages || 1}페이지, 전체 ${data.total || 0}개입니다.`
     )
   } catch (err) {
     setErrorMessage(err.message || 'DB 쿼리를 불러오지 못했습니다.')
   } finally {
     setDbLoading(false)
   }
-}
+  }
 
   const handleNormalizeQueries = async () => {
     setNormalizing(true)
@@ -413,7 +430,7 @@ export default function Home() {
 
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={fetchDbQueries}
+                  onClick={() => fetchDbQueries(1)}
                   disabled={dbLoading}
                   className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
@@ -519,15 +536,65 @@ export default function Home() {
 
             {dbQueries.length > 0 && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-bold text-gray-800">JEONGBOCHAJAJUM DB 쿼리 목록</p>
-                  <p className="text-xs text-gray-500">
-                    클릭하면 단일 쿼리 입력창에 적용됩니다.
-                  </p>
-                </div>
+                <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+  <div>
+    <p className="text-sm font-bold text-gray-800">
+      정보찾아줌 DB 쿼리 목록
+    </p>
+    <p className="mt-1 text-xs text-gray-500">
+      클릭하면 단일 쿼리 입력창에 적용됩니다.
+    </p>
+  </div>
+
+  <div className="flex flex-wrap items-center gap-2">
+    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600 border">
+      {dbQueryPage} / {dbQueryTotalPages} 페이지
+    </span>
+
+    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600 border">
+      전체 {dbQueryTotal.toLocaleString()}개
+    </span>
+
+    <button
+      type="button"
+      onClick={() => fetchDbQueries(1)}
+      disabled={dbLoading || dbQueryPage === 1}
+      className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+    >
+      처음
+    </button>
+
+    <button
+      type="button"
+      onClick={() => fetchDbQueries(dbQueryPage - 1)}
+      disabled={dbLoading || dbQueryPage <= 1}
+      className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+    >
+      이전 1000개
+    </button>
+
+    <button
+      type="button"
+      onClick={() => fetchDbQueries(dbQueryPage)}
+      disabled={dbLoading}
+      className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+    >
+      새로고침
+    </button>
+
+    <button
+      type="button"
+      onClick={() => fetchDbQueries(dbQueryPage + 1)}
+      disabled={dbLoading || dbQueryPage >= dbQueryTotalPages}
+      className="rounded-lg border bg-slate-800 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+    >
+      다음 1000개
+    </button>
+  </div>
+</div>
 
                 <div className="grid max-h-64 grid-cols-1 gap-2 overflow-auto lg:grid-cols-2 xl:grid-cols-3">
-                  {dbQueries.slice(0, 60).map((row, index) => {
+                  {dbQueries.slice(0, 300).map((row, index) => {
                     const q = pickDbQueryText(row)
 
                     return (
