@@ -51,10 +51,7 @@ export async function GET(request) {
 
     if (error) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: error.message,
-        },
+        { ok: false, error: error.message },
         { status: 500 }
       )
     }
@@ -86,10 +83,7 @@ export async function GET(request) {
     })
   } catch (error) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: error.message,
-      },
+      { ok: false, error: error.message },
       { status: 500 }
     )
   }

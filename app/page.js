@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import ResultCard from '@/components/ResultCard'
 import SearchBar from '@/components/SearchBar'
 
+const DB_QUERY_PAGE_SIZE = 1000
+
 async function readJsonResponse(res) {
   const text = await res.text()
   let data
@@ -95,10 +97,8 @@ function groupResultsBySite(items = []) {
 
   const grouped = items.reduce((acc, item) => {
     const key = getSiteKey(item)
-
     if (!acc[key]) acc[key] = []
     acc[key].push(item)
-
     return acc
   }, {})
 
@@ -120,16 +120,16 @@ export default function Home() {
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
+  const [queryMode, setQueryMode] = useState('raw')
   const [dbQueries, setDbQueries] = useState([])
   const [dbLoading, setDbLoading] = useState(false)
 
   const [dbQueryPage, setDbQueryPage] = useState(1)
   const [dbQueryTotal, setDbQueryTotal] = useState(0)
   const [dbQueryTotalPages, setDbQueryTotalPages] = useState(1)
-  const DB_QUERY_PAGE_SIZE = 1000
 
   const [candidateQuery, setCandidateQuery] = useState('')
-  const [candidateLimit, setCandidateLimit] = useState(100)
+  const [candidateLimit, setCandidateLimit] = useState(20)
   const [candidateLoading, setCandidateLoading] = useState(false)
   const [candidates, setCandidates] = useState([])
   const [selectedUrls, setSelectedUrls] = useState([])
@@ -137,8 +137,8 @@ export default function Home() {
   const [normalizing, setNormalizing] = useState(false)
   const [representing, setRepresenting] = useState(false)
   const [batchLoading, setBatchLoading] = useState(false)
-  const [batchQueryLimit, setBatchQueryLimit] = useState(20)
-  const [batchUrlLimit, setBatchUrlLimit] = useState(10)
+  const [batchQueryLimit, setBatchQueryLimit] = useState(5)
+  const [batchUrlLimit, setBatchUrlLimit] = useState(20)
   const [pipelineStats, setPipelineStats] = useState(null)
 
   const [manualKeyword, setManualKeyword] = useState('당근 분실물')
@@ -150,6 +150,16 @@ export default function Home() {
   const selectedCount = selectedUrls.length
   const manualUrlCount = useMemo(() => splitUrls(manualUrls).length, [manualUrls])
   const groupedResults = useMemo(() => groupResultsBySite(results), [results])
+
+  const currentQueryListTitle =
+    queryMode === 'raw'
+      ? '정보찾아줌 원본 쿼리 목록'
+      : '정제 대표 쿼리 목록'
+
+  const currentQueryListDescription =
+    queryMode === 'raw'
+      ? '정보찾아줌에서 Supabase 저장한 원본 쿼리입니다. 클릭하면 단일 쿼리 입력창에 적용됩니다.'
+      : '정제 후 대표 쿼리 만들기를 통해 생성된 대표 쿼리입니다. 클릭하면 단일 쿼리 입력창에 적용됩니다.'
 
   const fetchResults = useCallback(
     async (kw = keyword, pg = page) => {
@@ -186,51 +196,87 @@ export default function Home() {
     fetchResults(kw, 1)
   }
 
-  const fetchDbQueries = async (pageToLoad = 1) => {
-  setDbLoading(true)
-  setMessage('')
-  setErrorMessage('')
-
-  try {
-    const safePage = Math.max(1, Number(pageToLoad || 1))
-
-    const params = new URLSearchParams({
-      limit: String(DB_QUERY_PAGE_SIZE),
-      page: String(safePage),
-    })
-
-    const res = await fetch(`/api/db-queries?${params.toString()}`)
-    const data = await readJsonResponse(res)
-
-    if (!data.ok) {
-      throw new Error(data.error || 'DB 쿼리를 불러오지 못했습니다.')
-    }
-
-    const rows = data.queries || []
-    setDbQueries(rows)
-
-    setDbQueryPage(data.page || safePage)
-    setDbQueryTotal(data.total || 0)
-    setDbQueryTotalPages(data.totalPages || 1)
-
+  const applyFirstQueryToInput = (rows = []) => {
     const firstQuery = rows.map(pickDbQueryText).find(Boolean)
-
-    if (firstQuery) {
-      setCandidateQuery(firstQuery)
-    }
-
-    setMessage(
-      `정보찾아줌 DB 쿼리 ${rows.length}개를 불러왔습니다. ` +
-        `현재 ${data.page || safePage}/${data.totalPages || 1}페이지, 전체 ${data.total || 0}개입니다.`
-    )
-  } catch (err) {
-    setErrorMessage(err.message || 'DB 쿼리를 불러오지 못했습니다.')
-  } finally {
-    setDbLoading(false)
+    if (firstQuery) setCandidateQuery(firstQuery)
   }
+
+  const fetchRawQueries = async (pageToLoad = 1) => {
+    setQueryMode('raw')
+    setDbLoading(true)
+    setMessage('')
+    setErrorMessage('')
+
+    try {
+      const safePage = Math.max(1, Number(pageToLoad || 1))
+
+      const params = new URLSearchParams({
+        limit: String(DB_QUERY_PAGE_SIZE),
+        page: String(safePage),
+      })
+
+      const res = await fetch(`/api/db-queries?${params.toString()}`)
+      const data = await readJsonResponse(res)
+
+      if (!data.ok) {
+        throw new Error(data.error || '정보찾아줌 원본 쿼리를 불러오지 못했습니다.')
+      }
+
+      const rows = data.queries || []
+      setDbQueries(rows)
+
+      setDbQueryPage(data.page || safePage)
+      setDbQueryTotal(data.total || 0)
+      setDbQueryTotalPages(data.totalPages || 1)
+
+      applyFirstQueryToInput(rows)
+
+      setMessage(
+        `정보찾아줌 원본 쿼리 ${rows.length}개를 불러왔습니다. ` +
+          `현재 ${data.page || safePage}/${data.totalPages || 1}페이지, 전체 ${data.total || 0}개입니다.`
+      )
+    } catch (err) {
+      setErrorMessage(err.message || '정보찾아줌 원본 쿼리를 불러오지 못했습니다.')
+    } finally {
+      setDbLoading(false)
+    }
+  }
+
+  const fetchRepresentativeQueries = async () => {
+    setQueryMode('representative')
+    setDbLoading(true)
+    setMessage('')
+    setErrorMessage('')
+
+    try {
+      const res = await fetch('/api/representative-queries?limit=1000')
+      const data = await readJsonResponse(res)
+
+      if (!data.ok) {
+        throw new Error(data.error || '대표 쿼리를 불러오지 못했습니다.')
+      }
+
+      const rows = data.queries || []
+      setDbQueries(rows)
+
+      setDbQueryPage(1)
+      setDbQueryTotal(data.total || rows.length)
+      setDbQueryTotalPages(1)
+
+      applyFirstQueryToInput(rows)
+
+      setMessage(
+        `정제 대표 쿼리 ${rows.length}개를 불러왔습니다. 첫 번째 쿼리를 단일 입력창에 적용했습니다.`
+      )
+    } catch (err) {
+      setErrorMessage(err.message || '대표 쿼리를 불러오지 못했습니다.')
+    } finally {
+      setDbLoading(false)
+    }
   }
 
   const handleNormalizeQueries = async () => {
+    setQueryMode('representative')
     setNormalizing(true)
     setMessage('')
     setErrorMessage('')
@@ -239,7 +285,7 @@ export default function Home() {
       const res = await fetch('/api/queries/normalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 100, onlyEmpty: true }),
+        body: JSON.stringify({ limit: 500, onlyEmpty: true }),
       })
 
       const data = await readJsonResponse(res)
@@ -249,8 +295,7 @@ export default function Home() {
       }
 
       setPipelineStats(data)
-      setMessage(data.message || `쿼리 정제 완료: ${data.normalized_count || 0}개`)
-      fetchDbQueries()
+      setMessage(data.message || `정보찾아줌 쿼리 정제 완료: ${data.normalized_count || 0}개`)
     } catch (err) {
       setErrorMessage(err.message || '쿼리 정제 중 오류가 발생했습니다.')
     } finally {
@@ -259,6 +304,7 @@ export default function Home() {
   }
 
   const handleCreateRepresentatives = async () => {
+    setQueryMode('representative')
     setRepresenting(true)
     setMessage('')
     setErrorMessage('')
@@ -278,6 +324,8 @@ export default function Home() {
 
       setPipelineStats(data)
       setMessage(data.message || `대표 쿼리 생성 완료: ${data.representative_count || 0}개`)
+
+      await fetchRepresentativeQueries()
     } catch (err) {
       setErrorMessage(err.message || '대표 쿼리 생성 중 오류가 발생했습니다.')
     } finally {
@@ -286,6 +334,7 @@ export default function Home() {
   }
 
   const handleBatchRepresentativeSearch = async () => {
+    setQueryMode('representative')
     setBatchLoading(true)
     setMessage('')
     setErrorMessage('')
@@ -295,8 +344,8 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          queryLimit: Number(batchQueryLimit || 20),
-          urlLimit: Number(batchUrlLimit || 10),
+          queryLimit: Number(batchQueryLimit || 5),
+          urlLimit: Number(batchUrlLimit || 20),
           priorityMax: 4,
         }),
       })
@@ -336,7 +385,7 @@ export default function Home() {
         body: JSON.stringify({
           query,
           query_id: queryId,
-          limit: Number(candidateLimit || 10),
+          limit: Number(candidateLimit || 20),
         }),
       })
 
@@ -351,7 +400,10 @@ export default function Home() {
 
       setCandidates(data.urls || [])
       setSelectedUrls((data.urls || []).map((item) => item.url).filter(Boolean))
-      setMessage(`${data.cached ? '캐시된' : '새'} URL 후보 ${data.urls?.length || 0}개를 불러왔습니다.`)
+
+      setMessage(
+        `${data.provider === 'brave' ? 'Brave' : '검색 API'} URL 후보 ${data.urls?.length || 0}개를 불러왔습니다.`
+      )
     } catch (err) {
       setErrorMessage(err.message || 'URL 후보 수집 중 오류가 발생했습니다.')
     } finally {
@@ -410,7 +462,7 @@ export default function Home() {
             <div>
               <h1 className="text-3xl font-bold text-gray-800">검색 대시보드</h1>
               <p className="mt-1 text-sm text-gray-500">
-                정보찾아줌 DB 쿼리 → 대표 쿼리 → URL 후보 → 본문 수집
+                정보찾아줌 DB 쿼리 → URL 후보 → 본문 수집 / 정제 → 대표 쿼리 → 배치 수집
               </p>
             </div>
 
@@ -420,78 +472,106 @@ export default function Home() {
           </div>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+            <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
               <div>
-                <h2 className="text-lg font-bold text-gray-800">대량 처리 파이프라인</h2>
+                <h2 className="text-lg font-bold text-gray-800">쿼리 소스 선택</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  1만 개 쿼리를 그대로 돌리지 않고 정제·대표화한 뒤 대표 쿼리만 URL 후보 수집합니다.
+                  원본 쿼리는 정보찾아줌에서 저장된 쿼리를 그대로 사용하고, 대표 쿼리는 정제 후 압축된 쿼리를 사용합니다.
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => fetchDbQueries(1)}
+                  type="button"
+                  onClick={() => fetchRawQueries(1)}
                   disabled={dbLoading}
-                  className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50 ${
+                    queryMode === 'raw'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-700'
+                  }`}
                 >
-                  {dbLoading ? '불러오는 중...' : 'JEONGBOCHAJAJUM 쿼리 불러오기'}
+                  {dbLoading && queryMode === 'raw'
+                    ? '불러오는 중...'
+                    : '정보찾아줌 원본 쿼리'}
                 </button>
 
                 <button
-                  onClick={handleNormalizeQueries}
-                  disabled={normalizing}
-                  className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  type="button"
+                  onClick={fetchRepresentativeQueries}
+                  disabled={dbLoading}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50 ${
+                    queryMode === 'representative'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-purple-50 text-purple-700'
+                  }`}
                 >
-                  {normalizing ? '정제 중...' : '쿼리 정제하기'}
-                </button>
-
-                <button
-                  onClick={handleCreateRepresentatives}
-                  disabled={representing}
-                  className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {representing ? '생성 중...' : '대표 쿼리 만들기'}
+                  {dbLoading && queryMode === 'representative'
+                    ? '불러오는 중...'
+                    : '정제 대표 쿼리'}
                 </button>
               </div>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
-              <label className="text-sm text-gray-600">
-                대표 쿼리 처리 개수
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={batchQueryLimit}
-                  onChange={(e) => setBatchQueryLimit(e.target.value)}
-                  className="mt-1 block w-32 rounded-xl border px-3 py-2"
-                />
-              </label>
+            {queryMode === 'representative' && (
+              <>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={handleNormalizeQueries}
+                    disabled={normalizing}
+                    className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {normalizing ? '정제 중...' : '쿼리 정제하기'}
+                  </button>
 
-              <label className="text-sm text-gray-600">
-                쿼리당 URL 후보
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={batchUrlLimit}
-                  onChange={(e) => setBatchUrlLimit(e.target.value)}
-                  className="mt-1 block w-32 rounded-xl border px-3 py-2"
-                />
-              </label>
+                  <button
+                    onClick={handleCreateRepresentatives}
+                    disabled={representing}
+                    className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {representing ? '생성 중...' : '대표 쿼리 만들기'}
+                  </button>
+                </div>
 
-              <button
-                onClick={handleBatchRepresentativeSearch}
-                disabled={batchLoading}
-                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {batchLoading ? '배치 수집 중...' : '대표 쿼리 배치 URL 후보 수집'}
-              </button>
+                <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
+                  <label className="text-sm text-gray-600">
+                    대표 쿼리 처리 개수
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={batchQueryLimit}
+                      onChange={(e) => setBatchQueryLimit(e.target.value)}
+                      className="mt-1 block w-32 rounded-xl border px-3 py-2"
+                    />
+                  </label>
 
-              <p className="text-xs text-gray-500">
-                예: 20개 × 후보 10개 = Brave API 약 20회 사용
-              </p>
-            </div>
+                  <label className="text-sm text-gray-600">
+                    쿼리당 URL 후보
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={batchUrlLimit}
+                      onChange={(e) => setBatchUrlLimit(e.target.value)}
+                      className="mt-1 block w-32 rounded-xl border px-3 py-2"
+                    />
+                  </label>
+
+                  <button
+                    onClick={handleBatchRepresentativeSearch}
+                    disabled={batchLoading}
+                    className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {batchLoading ? '배치 수집 중...' : '대표 쿼리 배치 URL 후보 수집'}
+                  </button>
+
+                  <p className="text-xs text-gray-500">
+                    권장값: 5개 × 후보 20개
+                  </p>
+                </div>
+              </>
+            )}
 
             {pipelineStats && (
               <details className="mt-4 rounded-xl bg-slate-900 text-slate-100">
@@ -519,7 +599,7 @@ export default function Home() {
               <input
                 type="number"
                 min="1"
-                max="30"
+                max="100"
                 value={candidateLimit}
                 onChange={(e) => setCandidateLimit(e.target.value)}
                 className="rounded-xl border px-3 py-2"
@@ -537,64 +617,85 @@ export default function Home() {
             {dbQueries.length > 0 && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-  <div>
-    <p className="text-sm font-bold text-gray-800">
-      정보찾아줌 DB 쿼리 목록
-    </p>
-    <p className="mt-1 text-xs text-gray-500">
-      클릭하면 단일 쿼리 입력창에 적용됩니다.
-    </p>
-  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">
+                      {currentQueryListTitle}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {currentQueryListDescription}
+                    </p>
+                  </div>
 
-  <div className="flex flex-wrap items-center gap-2">
-    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600 border">
-      {dbQueryPage} / {dbQueryTotalPages} 페이지
-    </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {queryMode === 'raw' && (
+                      <>
+                        <span className="rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-600">
+                          {dbQueryPage} / {dbQueryTotalPages} 페이지
+                        </span>
 
-    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600 border">
-      전체 {dbQueryTotal.toLocaleString()}개
-    </span>
+                        <span className="rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-600">
+                          전체 {dbQueryTotal.toLocaleString()}개
+                        </span>
 
-    <button
-      type="button"
-      onClick={() => fetchDbQueries(1)}
-      disabled={dbLoading || dbQueryPage === 1}
-      className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
-    >
-      처음
-    </button>
+                        <button
+                          type="button"
+                          onClick={() => fetchRawQueries(1)}
+                          disabled={dbLoading || dbQueryPage === 1}
+                          className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+                        >
+                          처음
+                        </button>
 
-    <button
-      type="button"
-      onClick={() => fetchDbQueries(dbQueryPage - 1)}
-      disabled={dbLoading || dbQueryPage <= 1}
-      className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
-    >
-      이전 1000개
-    </button>
+                        <button
+                          type="button"
+                          onClick={() => fetchRawQueries(dbQueryPage - 1)}
+                          disabled={dbLoading || dbQueryPage <= 1}
+                          className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+                        >
+                          이전 1000개
+                        </button>
 
-    <button
-      type="button"
-      onClick={() => fetchDbQueries(dbQueryPage)}
-      disabled={dbLoading}
-      className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
-    >
-      새로고침
-    </button>
+                        <button
+                          type="button"
+                          onClick={() => fetchRawQueries(dbQueryPage)}
+                          disabled={dbLoading}
+                          className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+                        >
+                          새로고침
+                        </button>
 
-    <button
-      type="button"
-      onClick={() => fetchDbQueries(dbQueryPage + 1)}
-      disabled={dbLoading || dbQueryPage >= dbQueryTotalPages}
-      className="rounded-lg border bg-slate-800 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
-    >
-      다음 1000개
-    </button>
-  </div>
-</div>
+                        <button
+                          type="button"
+                          onClick={() => fetchRawQueries(dbQueryPage + 1)}
+                          disabled={dbLoading || dbQueryPage >= dbQueryTotalPages}
+                          className="rounded-lg border bg-slate-800 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+                        >
+                          다음 1000개
+                        </button>
+                      </>
+                    )}
 
-                <div className="grid max-h-64 grid-cols-1 gap-2 overflow-auto lg:grid-cols-2 xl:grid-cols-3">
-                  {dbQueries.slice(0, 300).map((row, index) => {
+                    {queryMode === 'representative' && (
+                      <>
+                        <span className="rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-600">
+                          대표 쿼리 {dbQueries.length.toLocaleString()}개
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={fetchRepresentativeQueries}
+                          disabled={dbLoading}
+                          className="rounded-lg border bg-white px-3 py-1 text-xs font-semibold text-gray-600 disabled:opacity-40"
+                        >
+                          새로고침
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid max-h-80 grid-cols-1 gap-2 overflow-auto lg:grid-cols-2 xl:grid-cols-3">
+                  {dbQueries.map((row, index) => {
                     const q = pickDbQueryText(row)
 
                     return (
@@ -609,7 +710,7 @@ export default function Home() {
                         }`}
                       >
                         <div className="mb-1 text-[11px] text-gray-400">
-                          {row.source_table || 'representative'} · {row.candidate_status || 'pending'}
+                          {row.source_table || 'query'} · {row.candidate_status || 'pending'}
                         </div>
                         <div className="line-clamp-2 font-semibold leading-5">{q}</div>
                       </button>
