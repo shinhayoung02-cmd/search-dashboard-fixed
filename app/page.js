@@ -59,6 +59,14 @@ function pickDbQueryText(row = {}) {
   ).trim()
 }
 
+function openGoogleSearch(query = '') {
+  const q = String(query || '').trim()
+  if (!q) return
+
+  const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 const SITE_META = {
   daangn: {
     label: '당근',
@@ -699,19 +707,22 @@ export default function Home() {
 
                     return (
                       <button
-                        key={row.id || `${q}-${index}`}
-                        type="button"
-                        onClick={() => setCandidateQuery(q)}
-                        className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                          candidateQuery === q
-                            ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-                            : 'border-slate-200 bg-white text-gray-700 hover:bg-slate-100'
-                        }`}
+                       key={row.id || `${q}-${index}`}
+                       type="button"
+                       onClick={() => {
+                         setCandidateQuery(q)
+                         openGoogleSearch(q)
+                       }}
+                       className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                         candidateQuery === q
+                           ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                           : 'border-slate-200 bg-white text-gray-700 hover:bg-slate-100'
+                       }`}
                       >
-                        <div className="mb-1 text-[11px] text-gray-400">
-                          {row.source_table || 'query'} · {row.candidate_status || 'pending'}
-                        </div>
-                        <div className="line-clamp-2 font-semibold leading-5">{q}</div>
+                       <div className="mb-1 text-[11px] text-gray-400">
+                         {row.source_table || 'query'} · {row.candidate_status || 'pending'}
+                       </div>
+                       <div className="line-clamp-2 font-semibold leading-5">{q}</div>
                       </button>
                     )
                   })}
