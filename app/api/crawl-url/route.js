@@ -44,7 +44,7 @@ export async function POST(request) {
       }
 
       query = data
-      keyword = keyword || query?.query_text || query?.keyword || query?.text || ''
+      keyword = keyword || query?.query_text || query?.keyword || query?.text || query?.query || ''
     }
 
     const crawled = await crawlPage(url)
@@ -54,18 +54,30 @@ export async function POST(request) {
     const payload = {
       query_id: queryId,
       keyword: keyword || url,
+
       site: source,
       source,
+
       title: crawled.title || url,
       url,
+
       description: crawled.snippet || '',
       snippet: crawled.snippet || '',
       detail_body: crawled.body || '',
+
       thumbnail: imageUrl,
       image_url: imageUrl,
+
       location: crawled.location || null,
       author: crawled.author || null,
+
       crawl_status: crawled.crawl_status || 'failed',
+
+      // 원본 게시물 날짜 저장
+      published_at: crawled.published_at || null,
+      post_date: crawled.post_date || null,
+      article_date: crawled.article_date || null,
+      published_at_raw: crawled.published_at_raw || null,
     }
 
     const { data, error } = await supabase
@@ -75,14 +87,20 @@ export async function POST(request) {
       .single()
 
     if (error) {
-      return json({
-        error: 'results 저장 실패: ' + error.message,
-        payload,
-      }, { status: 500 })
+      return json(
+        {
+          error: 'results 저장 실패: ' + error.message,
+          payload,
+        },
+        { status: 500 }
+      )
     }
 
     if (query?.id) {
-      await supabase.from('queries').update({ processed: true }).eq('id', query.id)
+      await supabase
+        .from('queries')
+        .update({ processed: true })
+        .eq('id', query.id)
     }
 
     return json({ ok: true, result: data, crawled })
