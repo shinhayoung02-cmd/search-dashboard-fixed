@@ -478,6 +478,52 @@ export default function Home() {
             </div>
           </div>
 
+          <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm">
+  <div className="flex flex-col gap-4">
+
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+        <p className="text-xs font-bold text-indigo-500">STEP 1</p>
+        <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 불러오기</h3>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          정보찾아줌 원본 쿼리 또는 정제 대표 쿼리 버튼을 눌러 검색 쿼리 목록을 불러옵니다.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+        <p className="text-xs font-bold text-indigo-500">STEP 2</p>
+        <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 선택</h3>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          쿼리 카드를 클릭하면 단일 쿼리 입력창에 적용됩니다. 연결 설정 시 Google 검색 결과도 새 탭으로 열 수 있습니다.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+        <p className="text-xs font-bold text-indigo-500">STEP 3</p>
+        <h3 className="mt-1 text-sm font-bold text-slate-900">URL 후보 수집</h3>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          검색 결과가 괜찮은 쿼리는 URL 후보 수집 버튼을 눌러 관련 게시글 링크를 가져옵니다.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+        <p className="text-xs font-bold text-indigo-500">STEP 4</p>
+        <h3 className="mt-1 text-sm font-bold text-slate-900">본문 수집</h3>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          필요한 URL을 선택하거나 직접 붙여넣어 게시글 제목, 본문, 날짜, 키워드를 수집합니다.
+        </p>
+      </div>
+    </div>
+
+    <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+      <p className="text-xs leading-5 text-amber-800">
+        권장 방식: 쿼리를 무작정 많이 돌리기보다, Google에서 먼저 검색 결과가 나오는지 확인한 뒤
+        의미 있는 쿼리만 URL 후보 수집으로 넘기는 것이 좋습니다.
+      </p>
+    </div>
+  </div>
+</section>
+
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
               <div>
