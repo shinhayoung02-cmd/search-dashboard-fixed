@@ -328,73 +328,87 @@ export async function POST(request) {
     const search_logs = []
 
     let requestCount = 0
-    const maxRequests = 3
+const maxRequests = 3
 
-    // 핵심 수정:
-    // offset 0~2를 돌리는 게 아니라,
-    // 원본 쿼리 → 따옴표 제거 쿼리 → site+핵심어 쿼리를 각각 1번씩만 검색한다.
-    for (const candidateQuery of queryVariants.slice(0, maxRequests)) {
-      if (requestCount >= maxRequests) break
-      if (collected.length >= limit) break
+const originalQuery = queryVariants[0]
+const relaxedQuery = queryVariants[1] || queryVariants[0]
+const coreQuery = queryVariants[2] || queryVariants[1] || queryVariants[0]
 
-      const result = await braveSearch(candidateQuery, {
-        limit,
-        siteDomain,
-        offset: 0,
-      })
+const searchPlans = [
+  // 1회차: 원본 쿼리
+  { query: originalQuery, offset: 0, mode: 'original' },
 
-      requestCount += 1
+  // 2회차: 따옴표 제거 완화 쿼리
+  { query: relaxedQuery, offset: 0, mode: 'relaxed' },
 
-      let addedCount = 0
-      let skippedCrawledCount = 0
-      let skippedDuplicateCount = 0
+  // 3회차: 완화 쿼리의 다음 결과 페이지
+  // 상위 20개가 이미 results에 저장된 경우 새 후보를 찾기 위함
+  { query: relaxedQuery || coreQuery, offset: 20, mode: 'relaxed_next_page' },
+]
 
-      for (const item of result.results) {
-        const itemUrl = item.url || item.source_url || ''
+for (const plan of searchPlans) {
+  if (requestCount >= maxRequests) break
+  if (collected.length >= limit) break
+  if (!plan.query) continue
 
-        if (!itemUrl) continue
+  const result = await braveSearch(plan.query, {
+    limit,
+    siteDomain,
+    offset: plan.offset,
+  })
 
-        // 본문 수집까지 완료되어 results 테이블에 저장된 URL만 제외
-        if (excludeUrls.has(itemUrl)) {
-          skippedCrawledCount += 1
-          continue
-        }
+  requestCount += 1
 
-        // 같은 응답/같은 요청 안에서 중복 URL 제외
-        if (collected.some((existing) => existing.url === itemUrl)) {
-          skippedDuplicateCount += 1
-          continue
-        }
+  let addedCount = 0
+  let skippedCrawledCount = 0
+  let skippedDuplicateCount = 0
 
-        collected.push({
-          ...item,
-          url: itemUrl,
-          source_url: itemUrl,
-          matched_query: candidateQuery,
-          matched_offset: 0,
-        })
+  for (const item of result.results) {
+    const itemUrl = item.url || item.source_url || ''
 
-        addedCount += 1
+    if (!itemUrl) continue
 
-        if (collected.length >= limit) break
-      }
-
-      search_logs.push({
-        query: candidateQuery,
-        offset: 0,
-        ok: result.ok,
-        status: result.status,
-        error: result.error,
-        raw_count: result.raw_count || 0,
-        result_count: result.results.length,
-        added_count: addedCount,
-        skipped_crawled_count: skippedCrawledCount,
-        skipped_duplicate_count: skippedDuplicateCount,
-        excluded_count: excludeUrls.size,
-      })
-
-      if (collected.length >= limit) break
+    if (excludeUrls.has(itemUrl)) {
+      skippedCrawledCount += 1
+      continue
     }
+
+    if (collected.some((existing) => existing.url === itemUrl)) {
+      skippedDuplicateCount += 1
+      continue
+    }
+
+    collected.push({
+      ...item,
+      url: itemUrl,
+      source_url: itemUrl,
+      matched_query: plan.query,
+      matched_offset: plan.offset,
+      matched_mode: plan.mode,
+    })
+
+    addedCount += 1
+
+    if (collected.length >= limit) break
+  }
+
+  search_logs.push({
+    query: plan.query,
+    offset: plan.offset,
+    mode: plan.mode,
+    ok: result.ok,
+    status: result.status,
+    error: result.error,
+    raw_count: result.raw_count || 0,
+    result_count: result.results.length,
+    added_count: addedCount,
+    skipped_crawled_count: skippedCrawledCount,
+    skipped_duplicate_count: skippedDuplicateCount,
+    excluded_count: excludeUrls.size,
+  })
+
+  if (collected.length >= limit) break
+}
 
     const urls = collected.slice(0, limit)
 
