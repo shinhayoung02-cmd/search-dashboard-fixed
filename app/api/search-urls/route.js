@@ -341,9 +341,9 @@ const searchPlans = [
   // 2회차: 따옴표 제거 완화 쿼리
   { query: relaxedQuery, offset: 0, mode: 'relaxed' },
 
-  // 3회차: 완화 쿼리의 다음 결과 페이지
-  // 상위 20개가 이미 results에 저장된 경우 새 후보를 찾기 위함
-  { query: relaxedQuery || coreQuery, offset: 20, mode: 'relaxed_next_page' },
+  // 3회차: Brave API는 offset 최대값이 9라서 20을 넣으면 422 오류가 난다.
+  // 따라서 가능한 최대 offset인 9로 뒤쪽 후보를 한 번 더 확인한다.
+  { query: relaxedQuery || coreQuery, offset: 9, mode: 'relaxed_offset_9' },
 ]
 
 for (const plan of searchPlans) {
