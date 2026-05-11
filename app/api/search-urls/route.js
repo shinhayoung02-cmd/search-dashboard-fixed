@@ -162,6 +162,7 @@ async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = 
       status: 500,
       error: 'BRAVE_SEARCH_API_KEY가 설정되어 있지 않습니다.',
       results: [],
+      raw_count: 0,
     }
   }
 
@@ -198,6 +199,7 @@ async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = 
     return {
       ok: false,
       query,
+      offset,
       status: res.status,
       error:
         data?.error?.message ||
@@ -205,6 +207,7 @@ async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = 
         text ||
         `Brave API 오류: ${res.status}`,
       results: [],
+      raw_count: 0,
       raw: data,
     }
   }
@@ -244,7 +247,7 @@ async function saveCandidatesToSupabase({ supabase, candidates, query, queryId }
     created_at: now,
   }))
 
-  // 현재 네 DB 스키마 기준: source_url 컬럼 사용
+  // 현재 DB 스키마 기준: source_url 컬럼 사용
   const attempt1 = await supabase
     .from('search_url_candidates')
     .insert(sourceUrlRows)
@@ -306,6 +309,7 @@ export async function POST(request) {
           error: 'query는 필수입니다.',
           urls: [],
           candidates: [],
+          results: [],
         },
         { status: 400 }
       )
@@ -318,64 +322,79 @@ export async function POST(request) {
 
     // 본문 수집까지 완료되어 results 테이블에 저장된 URL만 제외한다.
     // URL 후보로만 뜬 링크는 다시 나올 수 있다.
-
     const excludeUrls = await loadCrawledResultUrls(supabase)
 
     const collected = []
     const search_logs = []
 
     let requestCount = 0
-const maxRequests = 3
+    const maxRequests = 3
 
-for (const candidateQuery of queryVariants) {
-  if (requestCount >= maxRequests) break
+    // 핵심 수정:
+    // offset 0~2를 돌리는 게 아니라,
+    // 원본 쿼리 → 따옴표 제거 쿼리 → site+핵심어 쿼리를 각각 1번씩만 검색한다.
+    for (const candidateQuery of queryVariants.slice(0, maxRequests)) {
+      if (requestCount >= maxRequests) break
+      if (collected.length >= limit) break
 
-  for (let offset = 0; offset < 3; offset += 1) {
-    if (requestCount >= maxRequests) break
-    if (collected.length >= limit) break
+      const result = await braveSearch(candidateQuery, {
+        limit,
+        siteDomain,
+        offset: 0,
+      })
 
-    const result = await braveSearch(candidateQuery, {
-      limit,
-      siteDomain,
-      offset,
-    })
+      requestCount += 1
 
-    requestCount += 1
+      let addedCount = 0
+      let skippedCrawledCount = 0
+      let skippedDuplicateCount = 0
 
-    search_logs.push({
-      query: candidateQuery,
-      offset,
-      ok: result.ok,
-      status: result.status,
-      error: result.error,
-      raw_count: result.raw_count || 0,
-      result_count: result.results.length,
-      excluded_count: excludeUrls.size,
-    })
+      for (const item of result.results) {
+        const itemUrl = item.url || item.source_url || ''
 
-    for (const item of result.results) {
-      const itemUrl = item.url || item.source_url || ''
+        if (!itemUrl) continue
 
-      if (!itemUrl) continue
-      if (excludeUrls.has(itemUrl)) continue
-      if (collected.some((existing) => existing.url === itemUrl)) continue
+        // 본문 수집까지 완료되어 results 테이블에 저장된 URL만 제외
+        if (excludeUrls.has(itemUrl)) {
+          skippedCrawledCount += 1
+          continue
+        }
 
-      collected.push({
-        ...item,
-        url: itemUrl,
-        source_url: itemUrl,
-        matched_query: candidateQuery,
-        matched_offset: offset,
+        // 같은 응답/같은 요청 안에서 중복 URL 제외
+        if (collected.some((existing) => existing.url === itemUrl)) {
+          skippedDuplicateCount += 1
+          continue
+        }
+
+        collected.push({
+          ...item,
+          url: itemUrl,
+          source_url: itemUrl,
+          matched_query: candidateQuery,
+          matched_offset: 0,
+        })
+
+        addedCount += 1
+
+        if (collected.length >= limit) break
+      }
+
+      search_logs.push({
+        query: candidateQuery,
+        offset: 0,
+        ok: result.ok,
+        status: result.status,
+        error: result.error,
+        raw_count: result.raw_count || 0,
+        result_count: result.results.length,
+        added_count: addedCount,
+        skipped_crawled_count: skippedCrawledCount,
+        skipped_duplicate_count: skippedDuplicateCount,
+        excluded_count: excludeUrls.size,
       })
 
       if (collected.length >= limit) break
     }
-
-    if (collected.length >= limit) break
-  }
-
-  if (collected.length >= limit) break
-}
 
     const urls = collected.slice(0, limit)
 
@@ -414,7 +433,7 @@ for (const candidateQuery of queryVariants) {
       message:
         urls.length > 0
           ? `Brave URL 후보 ${urls.length}개를 불러왔습니다.`
-          : 'Brave URL 후보 0개입니다. 원본 쿼리와 자동 완화 쿼리까지 시도했지만 결과가 없습니다.',
+          : 'Brave URL 후보 0개입니다. 원본 쿼리와 비용 절약형 완화 쿼리까지 시도했지만 새 후보가 없습니다.',
     })
   } catch (error) {
     return json(
