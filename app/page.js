@@ -141,7 +141,6 @@ export default function Home() {
   const [batchUrlLimit, setBatchUrlLimit] = useState(20)
   const [pipelineStats, setPipelineStats] = useState(null)
 
-  const [manualKeyword, setManualKeyword] = useState('당근 분실물')
   const [manualUrls, setManualUrls] = useState('')
   const [crawlLoading, setCrawlLoading] = useState(false)
 
@@ -417,7 +416,7 @@ export default function Home() {
     )
   }
 
-  const handleCrawlUrls = async (urls, kw = manualKeyword) => {
+  const handleCrawlUrls = async (urls, kw = '직접 URL 수집') => {
     const finalUrls = Array.from(new Set(urls.filter(Boolean)))
 
     if (finalUrls.length === 0) {
@@ -774,36 +773,34 @@ export default function Home() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-bold text-gray-800">URL 직접 붙여넣기 본문 수집</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              검색 API가 막혔을 때 URL 여러 개를 직접 붙여넣어 본문만 수집합니다.
-            </p>
+  <h2 className="text-lg font-bold text-gray-800">URL 직접 붙여넣기 본문 수집</h2>
+  <p className="mt-1 text-sm text-gray-500">
+    검색 API가 막혔을 때 URL 여러 개를 직접 붙여넣어 본문만 수집합니다.
+  </p>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[220px_1fr_auto]">
-              <input
-                value={manualKeyword}
-                onChange={(e) => setManualKeyword(e.target.value)}
-                placeholder="키워드"
-                className="rounded-xl border px-3 py-2"
-              />
+  <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+    <textarea
+      value={manualUrls}
+      onChange={(e) => setManualUrls(e.target.value)}
+      rows={4}
+      placeholder="URL을 줄바꿈으로 붙여넣기"
+      className="rounded-xl border px-3 py-2"
+    />
 
-              <textarea
-                value={manualUrls}
-                onChange={(e) => setManualUrls(e.target.value)}
-                rows={4}
-                placeholder="URL을 줄바꿈으로 붙여넣기"
-                className="rounded-xl border px-3 py-2"
-              />
-
-              <button
-                onClick={() => handleCrawlUrls(splitUrls(manualUrls), manualKeyword)}
-                disabled={crawlLoading || manualUrlCount === 0}
-                className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {crawlLoading ? '수집 중...' : `URL ${manualUrlCount}개 본문 수집`}
-              </button>
-            </div>
-          </section>
+    <button
+      onClick={() =>
+        handleCrawlUrls(
+          splitUrls(manualUrls),
+          candidateQuery || '직접 URL 수집'
+        )
+      }
+      disabled={crawlLoading || manualUrlCount === 0}
+      className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+    >
+      {crawlLoading ? '수집 중...' : `URL ${manualUrlCount}개 본문 수집`}
+    </button>
+  </div>
+</section>
 
           {message && (
             <div className="rounded-xl border-l-4 border-indigo-400 bg-white px-4 py-3 text-sm text-gray-700 shadow">
