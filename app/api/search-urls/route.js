@@ -133,7 +133,7 @@ function normalizeBraveResults(results = [], siteDomain = '', limit = 20) {
   return output
 }
 
-async function braveSearch(query, { limit = 20, siteDomain = '' } = {}) {
+async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = {}) {
   const apiKey = getBraveApiKey()
 
   if (!apiKey) {
@@ -149,6 +149,7 @@ async function braveSearch(query, { limit = 20, siteDomain = '' } = {}) {
   const params = new URLSearchParams({
     q: query,
     count: String(Math.min(Math.max(Number(limit || 20), 1), 20)),
+    offset: String(Math.max(Number(offset || 0), 0)),
     country: 'KR',
     search_lang: 'ko',
     safesearch: 'off',
@@ -160,7 +161,6 @@ async function braveSearch(query, { limit = 20, siteDomain = '' } = {}) {
     method: 'GET',
     headers: {
       Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
       'X-Subscription-Token': apiKey,
     },
     cache: 'no-store',
@@ -196,6 +196,7 @@ async function braveSearch(query, { limit = 20, siteDomain = '' } = {}) {
   return {
     ok: true,
     query,
+    offset,
     status: res.status,
     error: null,
     results: normalized,
@@ -278,6 +279,11 @@ export async function POST(request) {
     const query = normalizeSpace(body.query || body.q || body.keyword || '')
     const queryId = body.query_id || body.queryId || null
     const limit = Math.min(Math.max(Number(body.limit || 20), 1), 20)
+    const excludeUrls = new Set(
+     (body.exclude_urls || body.excludeUrls || [])
+      .map((url) => String(url || '').trim())
+      .filter(Boolean)
+    )
 
     if (!query) {
       return json(
@@ -297,35 +303,58 @@ export async function POST(request) {
     const collected = []
     const search_logs = []
 
-    for (const candidateQuery of queryVariants) {
-      const result = await braveSearch(candidateQuery, {
-        limit,
-        siteDomain,
+    let requestCount = 0
+const maxRequests = 3
+
+for (const candidateQuery of queryVariants) {
+  if (requestCount >= maxRequests) break
+
+  for (let offset = 0; offset < 3; offset += 1) {
+    if (requestCount >= maxRequests) break
+    if (collected.length >= limit) break
+
+    const result = await braveSearch(candidateQuery, {
+      limit,
+      siteDomain,
+      offset,
+    })
+
+    requestCount += 1
+
+    search_logs.push({
+      query: candidateQuery,
+      offset,
+      ok: result.ok,
+      status: result.status,
+      error: result.error,
+      raw_count: result.raw_count || 0,
+      result_count: result.results.length,
+      excluded_count: excludeUrls.size,
+    })
+
+    for (const item of result.results) {
+      const itemUrl = item.url || item.source_url || ''
+
+      if (!itemUrl) continue
+      if (excludeUrls.has(itemUrl)) continue
+      if (collected.some((existing) => existing.url === itemUrl)) continue
+
+      collected.push({
+        ...item,
+        url: itemUrl,
+        source_url: itemUrl,
+        matched_query: candidateQuery,
+        matched_offset: offset,
       })
 
-      search_logs.push({
-        query: candidateQuery,
-        ok: result.ok,
-        status: result.status,
-        error: result.error,
-        raw_count: result.raw_count || 0,
-        result_count: result.results.length,
-      })
-
-      for (const item of result.results) {
-        if (!collected.some((existing) => existing.url === item.url)) {
-          collected.push({
-            ...item,
-            matched_query: candidateQuery,
-          })
-        }
-
-        if (collected.length >= limit) break
-      }
-
-      // 결과가 충분히 나오면 뒤의 완화 검색은 중단
       if (collected.length >= limit) break
     }
+
+    if (collected.length >= limit) break
+  }
+
+  if (collected.length >= limit) break
+}
 
     const urls = collected.slice(0, limit)
 
@@ -351,6 +380,8 @@ export async function POST(request) {
     return json({
       ok: true,
       provider: 'brave',
+      request_count: requestCount,
+      excluded_url_count: excludeUrls.size,
       query,
       site_domain: siteDomain,
       tried_queries: queryVariants,

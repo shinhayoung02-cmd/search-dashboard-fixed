@@ -386,15 +386,20 @@ export default function Home() {
     setErrorMessage('')
 
     try {
-      const res = await fetch('/api/search-urls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          query_id: queryId,
-          limit: Number(candidateLimit || 20),
-        }),
-      })
+  const res = await fetch('/api/search-urls', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      query_id: queryId,
+      limit: Number(candidateLimit || 20),
+
+      // 이미 화면에 떠 있는 URL 후보는 다시 안 나오게 제외
+      exclude_urls: urlCandidates
+        .map((item) => item.url || item.source_url || '')
+        .filter(Boolean),
+    }),
+  })
 
       const data = await readJsonResponse(res)
 
@@ -469,7 +474,7 @@ export default function Home() {
             <div>
               <h1 className="text-3xl font-bold text-gray-800">검색 대시보드</h1>
               <p className="mt-1 text-sm text-gray-500">
-                정보찾아줌 DB 쿼리 → URL 후보 → 본문 수집 / 정제 → 대표 쿼리 → 배치 수집
+                정보찾아줌 DB 쿼리 → URL 후보 → 본문 수집 / 정제 → 대표 쿼리 → 배치 수집 
               </p>
             </div>
 
