@@ -67,47 +67,40 @@ function buildBraveQueryVariants(originalQuery = '') {
   const siteDomain = extractSiteDomain(original)
   const sitePrefix = extractSitePrefix(original)
   const quotedTerms = extractQuotedTerms(original)
-  const withoutSite = stripSiteOperator(original)
   const withoutQuotes = stripQuotes(original)
-  const withoutSiteAndQuotes = stripQuotes(withoutSite)
 
   const variants = []
 
-  if (original) variants.push(original)
+  // 1차: 원본 쿼리 그대로 검색
+  // 예: site:clien.net "분실물" "확인" "찾기"
+  if (original) {
+    variants.push(original)
+  }
 
-  // site:clien.net "분실물" "확인" "찾기"
-  // → site:clien.net 분실물 확인 찾기
+  // 2차: 따옴표만 제거해서 검색 조건 완화
+  // 예: site:clien.net 분실물 확인 찾기
   if (withoutQuotes && withoutQuotes !== original) {
     variants.push(withoutQuotes)
   }
 
-  // site + 앞쪽 2개 키워드
-  if (sitePrefix && quotedTerms.length >= 2) {
-    variants.push(`${sitePrefix} "${quotedTerms[0]}" "${quotedTerms[1]}"`)
-    variants.push(`${sitePrefix} ${quotedTerms[0]} ${quotedTerms[1]}`)
-  }
-
-  // site + 첫 번째 키워드
+  // 3차: site + 핵심 키워드 1개만 사용
+  // 예: site:clien.net 분실물
   if (sitePrefix && quotedTerms.length >= 1) {
-    variants.push(`${sitePrefix} "${quotedTerms[0]}"`)
     variants.push(`${sitePrefix} ${quotedTerms[0]}`)
   }
 
-  // Brave가 site: 연산자를 빡세게 해석할 때를 대비해 도메인명 자체를 키워드처럼 넣음
-  if (siteDomain && withoutSiteAndQuotes) {
-    variants.push(`${siteDomain} ${withoutSiteAndQuotes}`)
+  // 따옴표 키워드가 없을 때 대비
+  if (siteDomain && variants.length < 3) {
+    const noSite = stripQuotes(stripSiteOperator(original))
+    const firstWord = noSite.split(/\s+/).filter(Boolean)[0]
+
+    if (firstWord) {
+      variants.push(`site:${siteDomain} ${firstWord}`)
+    }
   }
 
-  // 키워드만 검색
-  if (quotedTerms.length >= 2) {
-    variants.push(quotedTerms.join(' '))
-  }
-
-  if (quotedTerms.length >= 1) {
-    variants.push(quotedTerms[0])
-  }
-
-  return Array.from(new Set(variants.map(normalizeSpace).filter(Boolean)))
+  // 최대 3개까지만 반환해서 Brave API 비용 제한
+  return Array.from(new Set(variants.map(normalizeSpace).filter(Boolean))).slice(0, 3)
 }
 
 function normalizeBraveResults(results = [], siteDomain = '', limit = 20) {
