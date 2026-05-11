@@ -394,10 +394,6 @@ export default function Home() {
       query_id: queryId,
       limit: Number(candidateLimit || 20),
 
-      // 이미 화면에 떠 있는 URL 후보는 다시 안 나오게 제외
-      exclude_urls: urlCandidates
-        .map((item) => item.url || item.source_url || '')
-        .filter(Boolean),
     }),
   })
 
@@ -474,7 +470,7 @@ export default function Home() {
             <div>
               <h1 className="text-3xl font-bold text-gray-800">검색 대시보드</h1>
               <p className="mt-1 text-sm text-gray-500">
-                정보찾아줌 DB 쿼리 → URL 후보 → 본문 수집 / 정제 → 대표 쿼리 → 배치 수집 
+                정보찾아줌 DB 쿼리 → URL 후보 → 본문 수집 / 정제 → 대표 쿼리 → 배치 수집 / 오류 있으면 카톡남겨주세요.
               </p>
             </div>
 
@@ -689,6 +685,11 @@ export default function Home() {
                 {candidateLoading ? '수집 중...' : 'URL 후보 수집'}
               </button>
             </div>
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+             클릭 시 Brave Search API가 호출됩니다. 같은 쿼리를 다시 수집할 경우 이미 화면에 표시된 URL은 제외하고 새 후보만 가져옵니다.
+             비용은 검색 요청 기준으로 계산되며, 현재 설정은 클릭 1회당 최대 3회 요청까지 시도합니다.
+            </p>
 
             {dbQueries.length > 0 && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">

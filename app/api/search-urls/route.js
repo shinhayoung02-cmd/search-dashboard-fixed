@@ -53,6 +53,25 @@ function domainFromUrl(url = '') {
   }
 }
 
+async function loadCrawledResultUrls(supabase) {
+  const { data, error } = await supabase
+    .from('results')
+    .select('url')
+    .not('url', 'is', null)
+    .limit(10000)
+
+  if (error) {
+    console.error('results URL 조회 실패:', error.message)
+    return new Set()
+  }
+
+  return new Set(
+    (data || [])
+      .map((item) => String(item.url || '').trim())
+      .filter(Boolean)
+  )
+}
+
 function isTargetDomain(url = '', siteDomain = '') {
   if (!siteDomain) return true
 
@@ -279,11 +298,6 @@ export async function POST(request) {
     const query = normalizeSpace(body.query || body.q || body.keyword || '')
     const queryId = body.query_id || body.queryId || null
     const limit = Math.min(Math.max(Number(body.limit || 20), 1), 20)
-    const excludeUrls = new Set(
-     (body.exclude_urls || body.excludeUrls || [])
-      .map((url) => String(url || '').trim())
-      .filter(Boolean)
-    )
 
     if (!query) {
       return json(
@@ -299,6 +313,13 @@ export async function POST(request) {
 
     const siteDomain = extractSiteDomain(query)
     const queryVariants = buildBraveQueryVariants(query)
+
+    const supabase = getSupabaseAdmin()
+
+    // 본문 수집까지 완료되어 results 테이블에 저장된 URL만 제외한다.
+    // URL 후보로만 뜬 링크는 다시 나올 수 있다.
+
+    const excludeUrls = await loadCrawledResultUrls(supabase)
 
     const collected = []
     const search_logs = []
@@ -357,8 +378,6 @@ for (const candidateQuery of queryVariants) {
 }
 
     const urls = collected.slice(0, limit)
-
-    const supabase = getSupabaseAdmin()
 
     const saveResult = await saveCandidatesToSupabase({
       supabase,
