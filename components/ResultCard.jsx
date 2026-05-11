@@ -394,8 +394,7 @@ export default function ResultCard({ item }) {
   const keywordList = extractKeywords(keywordSource)
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm max-w-[520px]">
-      <div className="space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm w-full">      <div className="space-y-4">
         <div>
           <div className="text-[13px] font-semibold text-orange-500 mb-1">
             🗓 날짜
