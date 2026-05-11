@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 120
 
 function json(body, init = {}) {
   return NextResponse.json(body, init)
@@ -39,10 +39,16 @@ function cleanText(value = '') {
 function clampLimit(value, fallback = 10) {
   const n = Number(value || fallback)
   if (Number.isNaN(n)) return fallback
-  return Math.max(1, Math.min(n, 20))
+
+  // 단일 쿼리 URL 후보 최대 100개까지 허용
+  return Math.max(1, Math.min(n, 100))
 }
 
-async function searchBrave(query, limit = 10) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function searchBravePage(query, count = 20, offset = 0) {
   const apiKey = getBraveApiKey()
 
   if (!apiKey) {
@@ -51,7 +57,8 @@ async function searchBrave(query, limit = 10) {
 
   const params = new URLSearchParams({
     q: query,
-    count: String(clampLimit(limit, 10)),
+    count: String(count),
+    offset: String(offset),
     country: 'kr',
     search_lang: 'ko',
     ui_lang: 'ko-KR',
@@ -59,13 +66,16 @@ async function searchBrave(query, limit = 10) {
     text_decorations: 'false',
   })
 
-  const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params.toString()}`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'X-Subscription-Token': apiKey,
-    },
-  })
+  const res = await fetch(
+    `https://api.search.brave.com/res/v1/web/search?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Subscription-Token': apiKey,
+      },
+    }
+  )
 
   const text = await res.text()
 
@@ -78,7 +88,12 @@ async function searchBrave(query, limit = 10) {
 
   if (!res.ok) {
     throw new Error(
-      `BRAVE_API_${res.status}: ${data?.error?.detail || data?.message || text || 'Brave API 요청 실패'}`
+      `BRAVE_API_${res.status}: ${
+        data?.error?.detail ||
+        data?.message ||
+        text ||
+        'Brave API 요청 실패'
+      }`
     )
   }
 
@@ -87,6 +102,7 @@ async function searchBrave(query, limit = 10) {
   return results
     .map((item) => {
       const url = normalizeUrl(item.url)
+
       return {
         title: cleanText(item.title || ''),
         url,
@@ -97,11 +113,59 @@ async function searchBrave(query, limit = 10) {
     .filter((item) => item.url && item.url.startsWith('http'))
 }
 
+async function searchBrave(query, limit = 10) {
+  const finalLimit = clampLimit(limit, 10)
+  const pageSize = 20
+  const collected = []
+  const seen = new Set()
+
+  let offset = 0
+
+  while (collected.length < finalLimit) {
+    const remaining = finalLimit - collected.length
+    const count = Math.min(pageSize, remaining)
+
+    const pageResults = await searchBravePage(query, count, offset)
+
+    if (!pageResults.length) {
+      break
+    }
+
+    for (const item of pageResults) {
+      if (!item.url || seen.has(item.url)) continue
+
+      seen.add(item.url)
+      collected.push(item)
+
+      if (collected.length >= finalLimit) break
+    }
+
+    // Brave 페이지네이션: 다음 20개
+    offset += pageSize
+
+    // 너무 빠른 연속 호출 방지
+    await sleep(150)
+
+    // 같은 페이지만 반복되는 상황 방지
+    if (pageResults.length < count) {
+      break
+    }
+  }
+
+  return collected.slice(0, finalLimit)
+}
+
 async function saveCandidates(supabase, rows) {
-  if (!rows.length) return { saved_count: 0, save_error: null }
+  if (!rows.length) {
+    return {
+      saved_count: 0,
+      save_error: null,
+    }
+  }
 
   const attempts = [
     rows,
+
     rows.map((row) => {
       const {
         representative_query_id,
@@ -109,8 +173,10 @@ async function saveCandidates(supabase, rows) {
         query_text,
         ...rest
       } = row
+
       return rest
     }),
+
     rows.map((row) => ({
       url: row.url,
       title: row.title,
@@ -128,7 +194,10 @@ async function saveCandidates(supabase, rows) {
       .upsert(payload, { onConflict: 'url' })
 
     if (!error) {
-      return { saved_count: payload.length, save_error: null }
+      return {
+        saved_count: payload.length,
+        save_error: null,
+      }
     }
 
     lastError = error
@@ -218,7 +287,9 @@ export async function POST(request) {
       ok: true,
       provider: 'brave',
       query: finalQuery,
+      requested_limit: limit,
       result_count: urls.length,
+      estimated_api_requests: Math.ceil(limit / 20),
       urls,
       saved_count: saveResult.saved_count,
       save_error: saveResult.save_error,
