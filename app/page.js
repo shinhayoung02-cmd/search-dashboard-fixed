@@ -17,12 +17,84 @@ async function readJsonResponse(res) {
 }
 
 function splitUrls(text = '') {
-  return Array.from(new Set(
-    text
-      .split(/\r?\n|\s+/)
-      .map((v) => v.trim())
-      .filter((v) => v.startsWith('http'))
-  ))
+  return Array.from(
+    new Set(
+      text
+        .split(/\r?\n|\s+/)
+        .map((v) => v.trim())
+        .filter((v) => v.startsWith('http'))
+    )
+  )
+}
+
+function getSiteKey(item = {}) {
+  const source = String(item.source || item.site || item.url || '').toLowerCase()
+
+  if (source.includes('daangn')) return 'daangn'
+  if (source.includes('cafe.naver')) return 'naverCafe'
+  if (source.includes('clien')) return 'clien'
+  if (source.includes('joongna')) return 'joongna'
+  if (source.includes('bunjang')) return 'bunjang'
+
+  return 'etc'
+}
+
+const SITE_META = {
+  daangn: {
+    label: '당근',
+    sub: '당근 동네생활',
+    emoji: '🥕',
+    headerClass: 'border-orange-200',
+  },
+  naverCafe: {
+    label: '네이버 카페',
+    sub: '네이버 카페 게시글',
+    emoji: '🟢',
+    headerClass: 'border-green-200',
+  },
+  clien: {
+    label: '클리앙',
+    sub: '커뮤니티 게시글',
+    emoji: '💬',
+    headerClass: 'border-blue-200',
+  },
+  joongna: {
+    label: '중고나라',
+    sub: '중고거래 게시글',
+    emoji: '📦',
+    headerClass: 'border-yellow-200',
+  },
+  bunjang: {
+    label: '번개장터',
+    sub: '거래 게시글',
+    emoji: '⚡',
+    headerClass: 'border-purple-200',
+  },
+  etc: {
+    label: '기타',
+    sub: '기타 웹 결과',
+    emoji: '🌐',
+    headerClass: 'border-gray-200',
+  },
+}
+
+function groupResultsBySite(items = []) {
+  const order = ['daangn', 'naverCafe', 'clien', 'joongna', 'bunjang', 'etc']
+
+  const grouped = items.reduce((acc, item) => {
+    const key = getSiteKey(item)
+    if (!acc[key]) acc[key] = []
+    acc[key].push(item)
+    return acc
+  }, {})
+
+  return order
+    .filter((key) => grouped[key]?.length > 0)
+    .map((key) => ({
+      key,
+      meta: SITE_META[key],
+      items: grouped[key],
+    }))
 }
 
 export default function Home() {
@@ -58,6 +130,7 @@ export default function Home() {
 
   const selectedCount = selectedUrls.length
   const manualUrlCount = useMemo(() => splitUrls(manualUrls).length, [manualUrls])
+  const groupedResults = useMemo(() => groupResultsBySite(results), [results])
 
   const fetchResults = useCallback(async (kw = keyword, pg = page) => {
     setLoading(true)
@@ -116,7 +189,7 @@ export default function Home() {
       const res = await fetch('/api/queries/normalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 500, onlyEmpty: true }),
+        body: JSON.stringify({ limit: 100, onlyEmpty: true }),
       })
       const data = await readJsonResponse(res)
       if (!data.ok) throw new Error(data.error || '쿼리 정제 실패')
@@ -262,7 +335,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-6 bg-slate-50">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1500px] mx-auto">
         <div className="flex flex-col gap-4 mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
@@ -368,6 +441,7 @@ export default function Home() {
               {message}
             </div>
           )}
+
           {errorMessage && (
             <div className="px-4 py-3 bg-red-50 rounded-xl text-sm text-red-700 border border-red-200 whitespace-pre-wrap">
               {errorMessage}
@@ -385,15 +459,49 @@ export default function Home() {
             <p>결과가 없습니다. URL 후보를 수집하거나 직접 URL을 붙여넣어보세요.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
-            {results.map((item) => <ResultCard key={item.id} item={item} />)}
+          <div className="space-y-12">
+            {groupedResults.map((group) => (
+              <section key={group.key} className="space-y-4">
+                <div className={`flex items-end justify-between border-b pb-3 ${group.meta.headerClass}`}>
+                  <div>
+                    <h2 className="text-2xl font-extrabold text-gray-900">
+                      {group.meta.emoji} {group.meta.label}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {group.meta.sub}
+                    </p>
+                  </div>
+
+                  <div className="text-sm font-semibold text-gray-400">
+                    {group.items.length}개
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
+                  {group.items.map((item) => (
+                    <ResultCard
+                      key={item.id || item.url}
+                      item={item}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         )}
 
         {totalPages > 1 && (
           <div className="flex flex-wrap justify-center gap-2 mt-10">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <button key={p} onClick={() => setPage(p)} className={`w-9 h-9 rounded-full text-sm font-semibold transition ${p === page ? 'bg-indigo-500 text-white' : 'bg-white text-gray-600 hover:bg-indigo-50 border border-gray-200'}`}>
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`w-9 h-9 rounded-full text-sm font-semibold transition ${
+                  p === page
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-white text-gray-600 hover:bg-indigo-50 border border-gray-200'
+                }`}
+              >
                 {p}
               </button>
             ))}
