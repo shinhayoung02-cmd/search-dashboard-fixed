@@ -385,7 +385,7 @@ export default function Home() {
             <p>결과가 없습니다. URL 후보를 수집하거나 직접 URL을 붙여넣어보세요.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
             {results.map((item) => <ResultCard key={item.id} item={item} />)}
           </div>
         )}
