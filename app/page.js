@@ -39,6 +39,19 @@ function getSiteKey(item = {}) {
   return 'etc'
 }
 
+function pickDbQueryText(row = {}) {
+  return String(
+    row.display_query ||
+    row.representative_query ||
+    row.normalized_query ||
+    row.query_text ||
+    row.keyword ||
+    row.text ||
+    row.query ||
+    ''
+  ).trim()
+}
+
 const SITE_META = {
   daangn: {
     label: '당근',
@@ -103,7 +116,7 @@ export default function Home() {
   const [dbQueries, setDbQueries] = useState([])
   const [dbLoading, setDbLoading] = useState(false)
 
-  const [candidateQuery, setCandidateQuery] = useState('site:daangn.com 분실물')
+  const [candidateQuery, setCandidateQuery] = useState('')
   const [candidateLimit, setCandidateLimit] = useState(10)
   const [candidateLoading, setCandidateLoading] = useState(false)
   const [candidates, setCandidates] = useState([])
@@ -158,21 +171,36 @@ export default function Home() {
   }
 
   const fetchDbQueries = async () => {
-    setDbLoading(true)
-    setMessage('')
-    setErrorMessage('')
+  setDbLoading(true)
+  setMessage('')
+  setErrorMessage('')
 
-    try {
-      const res = await fetch('/api/queries')
-      const data = await readJsonResponse(res)
-      setDbQueries(data.queries || [])
-      setMessage(`DB 쿼리 ${data.queries?.length || 0}개를 불러왔습니다.`)
-    } catch (err) {
-      setErrorMessage(err.message || 'DB 쿼리를 불러오지 못했습니다.')
-    } finally {
-      setDbLoading(false)
+  try {
+    const res = await fetch('/api/representative-queries?limit=100')
+    const data = await readJsonResponse(res)
+
+    if (!data.ok) {
+      throw new Error(data.error || '대표 쿼리를 불러오지 못했습니다.')
     }
+
+    const rows = data.queries || []
+    setDbQueries(rows)
+
+    const firstQuery = rows.map(pickDbQueryText).find(Boolean)
+
+    if (firstQuery) {
+      setCandidateQuery(firstQuery)
+    }
+
+    setMessage(
+      `대표 쿼리 ${rows.length}개를 불러왔습니다. 첫 번째 쿼리를 단일 입력창에 적용했습니다.`
+    )
+  } catch (err) {
+    setErrorMessage(err.message || '대표 쿼리를 불러오지 못했습니다.')
+  } finally {
+    setDbLoading(false)
   }
+}
 
   const handleNormalizeQueries = async () => {
     setNormalizing(true)
@@ -391,6 +419,45 @@ export default function Home() {
                 {candidateLoading ? '수집 중...' : 'URL 후보 수집'}
               </button>
             </div>
+
+            {dbQueries.length > 0 && (
+  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <div className="flex items-center justify-between mb-2">
+      <p className="text-sm font-bold text-gray-800">
+        대표 쿼리 목록
+      </p>
+      <p className="text-xs text-gray-500">
+        클릭하면 단일 쿼리 입력창에 적용됩니다.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 max-h-64 overflow-auto">
+      {dbQueries.slice(0, 30).map((row, index) => {
+        const q = pickDbQueryText(row)
+
+        return (
+          <button
+            key={row.id || `${q}-${index}`}
+            type="button"
+            onClick={() => setCandidateQuery(q)}
+            className={`text-left rounded-lg border px-3 py-2 text-sm transition ${
+              candidateQuery === q
+                ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                : 'border-slate-200 bg-white text-gray-700 hover:bg-slate-100'
+            }`}
+          >
+            <div className="text-[11px] text-gray-400 mb-1">
+              {row.source_table || 'representative'} · {row.candidate_status || 'pending'}
+            </div>
+            <div className="font-semibold leading-5 line-clamp-2">
+              {q}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  </div>
+)}
 
             {candidates.length > 0 && (
               <div className="mt-4 space-y-2">
