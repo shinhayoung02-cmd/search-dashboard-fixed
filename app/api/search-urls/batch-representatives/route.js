@@ -28,46 +28,80 @@ function domainFromUrl(url = '') {
   }
 }
 
-function cleanText(value = '') {
+function sanitizeForDb(value = '', maxLength = 2000) {
   return String(value || '')
+    // HTML 제거
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
+
+    // HTML entity 일부 정리
     .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+
+    // Postgres가 싫어하는 null/제어문자 제거
+    .replace(/\u0000/g, ' ')
+    .replace(/\\u0000/g, ' ')
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ')
+
+    // 깨진 surrogate 제거
+    .replace(/[\uD800-\uDFFF]/g, ' ')
+
+    // 과한 공백 정리
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength)
+}
+
+function cleanQuery(value = '') {
+  return sanitizeForDb(value, 500)
+    .replace(/\bconfusing\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-function clampLimit(value, fallback = 5, max = 20) {
+function clampLimit(value, fallback = 5, max = 10) {
+  const n = Number(value || fallback)
+  if (Number.isNaN(n)) return fallback
+  return Math.max(1, Math.min(n, max))
+}
+
+function clampUrlLimit(value, fallback = 20, max = 20) {
   const n = Number(value || fallback)
   if (Number.isNaN(n)) return fallback
   return Math.max(1, Math.min(n, max))
 }
 
 function pickRepresentativeQuery(row = {}) {
-  return String(
+  return cleanQuery(
     row.representative_query ||
-    row.normalized_query ||
-    row.query_text ||
-    row.keyword ||
-    row.text ||
-    row.query ||
-    ''
-  ).trim()
+      row.normalized_query ||
+      row.query_text ||
+      row.keyword ||
+      row.text ||
+      row.query ||
+      ''
+  )
 }
 
-async function searchBrave(query, limit = 5) {
+async function searchBrave(query, limit = 20) {
   const apiKey = getBraveApiKey()
 
   if (!apiKey) {
     throw new Error('BRAVE_API_KEY가 설정되어 있지 않습니다.')
   }
 
+  const finalLimit = clampUrlLimit(limit, 20, 20)
+
   const params = new URLSearchParams({
     q: query,
-    count: String(clampLimit(limit, 5, 20)),
+    count: String(finalLimit),
     country: 'kr',
     search_lang: 'ko',
     ui_lang: 'ko-KR',
@@ -75,13 +109,16 @@ async function searchBrave(query, limit = 5) {
     text_decorations: 'false',
   })
 
-  const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params.toString()}`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'X-Subscription-Token': apiKey,
-    },
-  })
+  const res = await fetch(
+    `https://api.search.brave.com/res/v1/web/search?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Subscription-Token': apiKey,
+      },
+    }
+  )
 
   const text = await res.text()
 
@@ -94,23 +131,38 @@ async function searchBrave(query, limit = 5) {
 
   if (!res.ok) {
     throw new Error(
-      `BRAVE_API_${res.status}: ${data?.error?.detail || data?.message || text || 'Brave API 요청 실패'}`
+      `BRAVE_API_${res.status}: ${
+        data?.error?.detail ||
+        data?.message ||
+        text ||
+        'Brave API 요청 실패'
+      }`
     )
   }
 
   const results = data?.web?.results || []
 
+  const seen = new Set()
+
   return results
     .map((item) => {
       const url = normalizeUrl(item.url)
+      const source = domainFromUrl(url)
+
       return {
-        title: cleanText(item.title || ''),
+        title: sanitizeForDb(item.title || '', 500),
         url,
-        snippet: cleanText(item.description || ''),
-        source: domainFromUrl(url),
+        snippet: sanitizeForDb(item.description || '', 1500),
+        source: sanitizeForDb(source, 200),
       }
     })
-    .filter((item) => item.url && item.url.startsWith('http'))
+    .filter((item) => {
+      if (!item.url || !item.url.startsWith('http')) return false
+      if (seen.has(item.url)) return false
+      seen.add(item.url)
+      return true
+    })
+    .slice(0, finalLimit)
 }
 
 async function loadRepresentativeRows(supabase, limit) {
@@ -165,58 +217,52 @@ async function updateRepresentativeStatus(supabase, row, status, errorMessage = 
   const tableName = row._source_table
   if (!tableName || !row.id) return
 
-  const payload = {
-    candidate_status: status,
-    candidate_error: errorMessage,
-    candidate_attempted_at: new Date().toISOString(),
+  try {
+    await supabase
+      .from(tableName)
+      .update({
+        candidate_status: status,
+        candidate_error: errorMessage ? sanitizeForDb(errorMessage, 500) : null,
+        candidate_attempted_at: new Date().toISOString(),
+      })
+      .eq('id', row.id)
+  } catch {
+    // 상태 업데이트 실패는 전체 수집 실패로 보지 않음
   }
-
-  await supabase
-    .from(tableName)
-    .update(payload)
-    .eq('id', row.id)
 }
 
 async function saveCandidates(supabase, rows) {
-  if (!rows.length) return { saved_count: 0, save_error: null }
-
-  const attempts = [
-    rows,
-    rows.map((row) => {
-      const {
-        representative_query_id,
-        query_id,
-        query_text,
-        ...rest
-      } = row
-      return rest
-    }),
-    rows.map((row) => ({
-      url: row.url,
-      title: row.title,
-      snippet: row.snippet,
-      source: row.source,
-      status: row.status,
-    })),
-  ]
-
-  let lastError = null
-
-  for (const payload of attempts) {
-    const { error } = await supabase
-      .from('search_url_candidates')
-      .upsert(payload, { onConflict: 'url' })
-
-    if (!error) {
-      return { saved_count: payload.length, save_error: null }
+  if (!rows.length) {
+    return {
+      saved_count: 0,
+      save_error: null,
     }
+  }
 
-    lastError = error
+  // Worker subrequest를 줄이기 위해 최소 컬럼만 저장
+  const payload = rows.map((row) => ({
+    url: sanitizeForDb(row.url, 1000),
+    title: sanitizeForDb(row.title, 500),
+    snippet: sanitizeForDb(row.snippet, 1500),
+    source: sanitizeForDb(row.source, 200),
+    status: 'pending',
+    updated_at: row.updated_at || new Date().toISOString(),
+  }))
+
+  const { error } = await supabase
+    .from('search_url_candidates')
+    .upsert(payload, { onConflict: 'url' })
+
+  if (error) {
+    return {
+      saved_count: 0,
+      save_error: error.message,
+    }
   }
 
   return {
-    saved_count: 0,
-    save_error: lastError?.message || 'search_url_candidates 저장 실패',
+    saved_count: payload.length,
+    save_error: null,
   }
 }
 
@@ -224,11 +270,13 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}))
 
-    const queryLimit = clampLimit(body.queryLimit || body.limit || 5, 5, 20)
-    const urlLimit = clampLimit(body.urlLimit || 5, 5, 20)
+    // 대표 쿼리 배치는 한 번에 너무 많이 돌리면 Cloudflare에서 막힘
+    const queryLimit = clampLimit(body.queryLimit || body.limit || 5, 5, 10)
+
+    // Brave는 한 번 요청에서 최대 20개가 적정
+    const urlLimit = clampUrlLimit(body.urlLimit || 20, 20, 20)
 
     const supabase = getSupabaseAdmin()
-
     const { tableName, rows } = await loadRepresentativeRows(supabase, queryLimit)
 
     const processed = []
@@ -241,7 +289,9 @@ export async function POST(request) {
         failed.push({
           representative_query_id: row.id,
           representative_query: '',
+          provider: 'brave',
           reason: 'EMPTY_REPRESENTATIVE_QUERY',
+          result_count: 0,
         })
         continue
       }
@@ -251,9 +301,6 @@ export async function POST(request) {
         const now = new Date().toISOString()
 
         const candidateRows = urls.map((item) => ({
-          representative_query_id: row.id,
-          query_id: tableName === 'queries' ? row.id : null,
-          query_text: representativeQuery,
           url: item.url,
           title: item.title,
           snippet: item.snippet,
@@ -300,7 +347,7 @@ export async function POST(request) {
           representative_query_id: row.id,
           representative_query: representativeQuery,
           provider: 'brave',
-          reason: error.message,
+          reason: sanitizeForDb(error.message, 500),
           result_count: 0,
         })
 
@@ -312,7 +359,8 @@ export async function POST(request) {
         )
       }
 
-      await delay(250)
+      // Brave / Supabase 연속 요청 완화
+      await delay(300)
     }
 
     return json({
@@ -331,8 +379,8 @@ export async function POST(request) {
       {
         ok: false,
         provider: 'brave',
-        error: error.message,
-        message: error.message,
+        error: sanitizeForDb(error.message, 500),
+        message: sanitizeForDb(error.message, 500),
       },
       { status: 500 }
     )
