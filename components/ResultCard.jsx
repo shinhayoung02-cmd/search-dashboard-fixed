@@ -76,6 +76,10 @@ export default function ResultCard({ item }) {
   const cleanBody = normalizeText(rawBody || '')
 
   const getFallbackBody = () => {
+    if (item.crawl_status === 'manual_success') {
+      return '브라우저에서 확인한 본문을 수동 저장한 카드입니다.'
+    }
+
     if (item.crawl_status === 'search_only') {
       return '네이버 카페 본문 접근이 제한되어 검색 결과 제목과 요약을 기준으로 표시합니다.'
     }
@@ -101,53 +105,37 @@ export default function ResultCard({ item }) {
 
   const getCrawlBadge = () => {
     if (item.crawl_status === 'success') {
-      return {
-        label: '본문 수집 완료',
-        cls: 'bg-emerald-100 text-emerald-700',
-      }
+      return { label: '본문 수집 완료', cls: 'bg-emerald-100 text-emerald-700' }
+    }
+
+    if (item.crawl_status === 'manual_success') {
+      return { label: '수동 본문 저장', cls: 'bg-indigo-100 text-indigo-700' }
     }
 
     if (item.crawl_status === 'search_only') {
-      return {
-        label: '검색 결과 기반',
-        cls: 'bg-sky-100 text-sky-700',
-      }
+      return { label: '검색 결과 기반', cls: 'bg-sky-100 text-sky-700' }
     }
 
     if (item.crawl_status === 'blocked') {
-      return {
-        label: '접근 제한',
-        cls: 'bg-yellow-100 text-yellow-700',
-      }
+      return { label: '접근 제한', cls: 'bg-yellow-100 text-yellow-700' }
     }
 
     if (item.crawl_status === 'failed') {
-      return {
-        label: '수집 실패',
-        cls: 'bg-red-100 text-red-700',
-      }
+      return { label: '수집 실패', cls: 'bg-red-100 text-red-700' }
     }
 
     if (item.crawl_status === 'empty') {
-      return {
-        label: '본문 없음',
-        cls: 'bg-gray-100 text-gray-500',
-      }
+      return { label: '본문 없음', cls: 'bg-gray-100 text-gray-500' }
     }
 
-    return {
-      label: '상태 확인 필요',
-      cls: 'bg-gray-100 text-gray-600',
-    }
+    return { label: '상태 확인 필요', cls: 'bg-gray-100 text-gray-600' }
   }
 
   const crawlBadge = getCrawlBadge()
-
   const imageSrc = item.image_url || item.thumbnail || item.og_image || ''
 
   return (
     <div className="bg-white rounded-[28px] overflow-hidden shadow-sm border border-gray-100 hover:shadow-lg transition flex flex-col">
-      {/* 이미지 영역 */}
       <div className="h-52 bg-gradient-to-br from-pink-100 via-rose-100 to-pink-200 border-b border-gray-200 overflow-hidden">
         {imageSrc ? (
           <img
@@ -172,7 +160,6 @@ export default function ResultCard({ item }) {
       </div>
 
       <div className="p-6 flex flex-col gap-4">
-        {/* 출처 뱃지 + 상태 + 키워드 */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <span
             className={`inline-flex items-center gap-1 text-sm font-bold px-4 py-2 rounded-full ${getBadgeClass(sourceValue)}`}
@@ -193,7 +180,6 @@ export default function ResultCard({ item }) {
           )}
         </div>
 
-        {/* 제목 */}
         <a
           href={item.url}
           target="_blank"
@@ -203,12 +189,10 @@ export default function ResultCard({ item }) {
           {displayTitle}
         </a>
 
-        {/* 본문 */}
         <p className="text-gray-700 text-[15px] leading-7 font-medium whitespace-pre-wrap line-clamp-5">
           {displayBody}
         </p>
 
-        {/* 네이버 카페 접근 제한 안내 */}
         {(sourceValue.includes('cafe.naver') &&
           (item.crawl_status === 'search_only' || item.crawl_status === 'blocked')) && (
           <div className="text-xs leading-5 text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2">
@@ -216,7 +200,12 @@ export default function ResultCard({ item }) {
           </div>
         )}
 
-        {/* 위치 / 작성자 */}
+        {item.crawl_status === 'manual_success' && (
+          <div className="text-xs leading-5 text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
+            이 카드는 브라우저에서 실제로 보이는 본문을 저장한 데이터입니다.
+          </div>
+        )}
+
         {(item.location || item.author) && (
           <div className="flex gap-3 text-sm text-gray-400">
             {item.location && <span>📍 {item.location}</span>}
@@ -224,7 +213,6 @@ export default function ResultCard({ item }) {
           </div>
         )}
 
-        {/* 키워드 태그 */}
         {item.keywords?.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-1">
             {item.keywords.slice(0, 6).map((kw, idx) => (
@@ -238,7 +226,6 @@ export default function ResultCard({ item }) {
           </div>
         )}
 
-        {/* 원본 링크 */}
         {item.url && (
           <a
             href={item.url}
