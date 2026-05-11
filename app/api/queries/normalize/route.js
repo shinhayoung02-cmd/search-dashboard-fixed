@@ -13,21 +13,23 @@ function chunkArray(array, size) {
   return chunks
 }
 
+function pickQueryText(row) {
+  return row.query_text || row.keyword || row.text || row.query || ''
+}
+
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}))
 
-    // 너무 크게 잡으면 응답 payload와 DB 저장량이 커집니다.
-    // 지금 구조에서는 500 기본, 최대 1000이 적정선입니다.
-    const rawLimit = Number(body.limit || 500)
-    const limit = Math.max(1, Math.min(rawLimit, 1000))
+    // 너무 크게 잡으면 Cloudflare/Supabase에서 다시 터질 수 있음
+    const limit = Math.max(1, Math.min(Number(body.limit || 500), 1000))
     const onlyEmpty = body.onlyEmpty !== false
 
     const supabase = getSupabaseAdmin()
 
     let q = supabase
       .from('queries')
-      .select('id, query_text, keyword, text, query, source, normalized_query')
+      .select('id, query_text, keyword, text, query, source, processed, normalized_query, created_at')
       .order('created_at', { ascending: true })
       .limit(limit)
 
@@ -39,7 +41,11 @@ export async function POST(request) {
 
     if (error) {
       return NextResponse.json(
-        { ok: false, error: error.message },
+        {
+          ok: false,
+          stage: 'select_queries',
+          error: error.message,
+        },
         { status: 500 }
       )
     }
@@ -49,35 +55,61 @@ export async function POST(request) {
     const updates = []
 
     for (const row of rows || []) {
-      const item = normalizeRow(row)
+      try {
+        const baseText = pickQueryText(row)
 
-      if (!item.original_query || !item.normalized_query) {
-        failed.push({ id: row.id, reason: 'EMPTY_QUERY' })
-        continue
+        if (!baseText) {
+          failed.push({ id: row.id, reason: 'EMPTY_QUERY' })
+          continue
+        }
+
+        const item = normalizeRow({
+          ...row,
+          query_text: row.query_text || baseText,
+          keyword: row.keyword || baseText,
+          text: row.text || baseText,
+          query: row.query || baseText,
+        })
+
+        if (!item.original_query || !item.normalized_query) {
+          failed.push({ id: row.id, reason: 'NORMALIZE_EMPTY_RESULT' })
+          continue
+        }
+
+        // 중요:
+        // upsert 시 기존 not null 컬럼이 있으면 터질 수 있으므로
+        // keyword/query_text/text/query/source 같은 기존 필드도 같이 넣음
+        updates.push({
+          id: row.id,
+
+          keyword: row.keyword || baseText,
+          query_text: row.query_text || baseText,
+          text: row.text || baseText,
+          query: row.query || baseText,
+          source: row.source || 'unknown',
+          processed: row.processed ?? false,
+
+          normalized_query: item.normalized_query,
+          query_group: item.query_group,
+          representative_key: item.representative_key,
+          priority: item.priority,
+          candidate_status: 'pending',
+          candidate_error: null,
+        })
+
+        normalized.push(item)
+      } catch (e) {
+        failed.push({
+          id: row.id,
+          reason: e.message || 'NORMALIZE_EXCEPTION',
+        })
       }
-
-      updates.push({
-        id: row.id,
-        normalized_query: item.normalized_query,
-        query_group: item.query_group,
-        representative_key: item.representative_key,
-        priority: item.priority,
-        candidate_status: 'pending',
-        candidate_error: null,
-      })
-
-      normalized.push(item)
     }
 
-    // 핵심 수정:
-    // 기존 방식은 row마다 update 요청을 보내서 Cloudflare subrequest 제한에 걸렸습니다.
-    // 이제는 300개씩 묶어서 upsert하므로 요청 수가 크게 줄어듭니다.
-    const chunks = chunkArray(updates, 300)
+    const chunks = chunkArray(updates, 200)
     const dbErrors = []
 
     for (const chunk of chunks) {
-      if (chunk.length === 0) continue
-
       const { error: upsertError } = await supabase
         .from('queries')
         .upsert(chunk, { onConflict: 'id' })
@@ -91,15 +123,17 @@ export async function POST(request) {
       return NextResponse.json(
         {
           ok: false,
+          stage: 'upsert_queries',
           requested_limit: limit,
           fetched_count: rows?.length || 0,
+          update_count: updates.length,
           normalized_count: normalized.length,
           failed_count: failed.length,
-          saved_chunks: chunks.length,
           db_errors: dbErrors,
           normalized: normalized.slice(0, 20),
           failed: failed.slice(0, 20),
-          message: '일부 또는 전체 정제 결과 저장에 실패했습니다.',
+          error: dbErrors.join('\n'),
+          message: '정제 결과 저장 중 DB 오류가 발생했습니다.',
         },
         { status: 500 }
       )
@@ -109,6 +143,7 @@ export async function POST(request) {
       ok: true,
       requested_limit: limit,
       fetched_count: rows?.length || 0,
+      update_count: updates.length,
       normalized_count: normalized.length,
       failed_count: failed.length,
       saved_chunks: chunks.length,
@@ -118,7 +153,11 @@ export async function POST(request) {
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error.message },
+      {
+        ok: false,
+        stage: 'exception',
+        error: error.message,
+      },
       { status: 500 }
     )
   }
