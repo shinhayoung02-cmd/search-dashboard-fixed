@@ -83,48 +83,139 @@ function isTargetDomain(url = '', siteDomain = '') {
 
 function buildBraveQueryVariants(originalQuery = '') {
   const original = normalizeSpace(originalQuery)
-  const siteDomain = extractSiteDomain(original)
-  const sitePrefix = extractSitePrefix(original)
-  const quotedTerms = extractQuotedTerms(original)
   const withoutQuotes = stripQuotes(original)
 
   const variants = []
 
-  // 1차: 원본 쿼리 그대로 검색
+  // 1차: 원본 쿼리
   // 예: site:clien.net "분실물" "확인" "찾기"
-  if (original) {
-    variants.push(original)
-  }
+  if (original) variants.push(original)
 
-  // 2차: 따옴표만 제거해서 검색 조건 완화
+  // 2차: 따옴표 제거
   // 예: site:clien.net 분실물 확인 찾기
   if (withoutQuotes && withoutQuotes !== original) {
     variants.push(withoutQuotes)
   }
 
-  // 3차: site + 핵심 키워드 1개만 사용
-  // 예: site:clien.net 분실물
-  if (sitePrefix && quotedTerms.length >= 1) {
-    variants.push(`${sitePrefix} ${quotedTerms[0]}`)
-  }
+  // 여기서 site:clien.net 분실물 같은 과도한 핵심어 fallback은 일부러 만들지 않음.
+  // 너무 넓어져서 분실물과 상관없는 결과가 섞이는 원인이 됨.
 
-  // 따옴표 키워드가 없을 때 대비
-  if (siteDomain && variants.length < 3) {
-    const noSite = stripQuotes(stripSiteOperator(original))
-    const firstWord = noSite.split(/\s+/).filter(Boolean)[0]
-
-    if (firstWord) {
-      variants.push(`site:${siteDomain} ${firstWord}`)
-    }
-  }
-
-  // 최대 3개까지만 반환해서 Brave API 비용 제한
-  return Array.from(new Set(variants.map(normalizeSpace).filter(Boolean))).slice(0, 3)
+  return Array.from(new Set(variants.map(normalizeSpace).filter(Boolean))).slice(0, 2)
 }
 
-function normalizeBraveResults(results = [], siteDomain = '', limit = 20) {
+function getQueryTerms(query = '') {
+  const quoted = extractQuotedTerms(query)
+
+  const stripped = stripQuotes(stripSiteOperator(query))
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+
+  return Array.from(new Set([...quoted, ...stripped]))
+}
+
+function hasLostItemIntent(text = '') {
+  const value = String(text || '').toLowerCase()
+
+  const lostItemTerms = [
+    '분실물',
+    '유실물',
+    '분실',
+    '습득',
+    '잃어버',
+    '잃어 버',
+    '두고 내',
+    '두고내',
+    '주웠',
+    '찾아가',
+    '찾아주세요',
+    '보관중',
+    '분실신고',
+    '유실물 신고',
+    '유실물센터',
+    '분실물센터',
+    'lost112',
+  ]
+
+  return lostItemTerms.some((term) => value.includes(term.toLowerCase()))
+}
+
+function isWeakSearchTerm(term = '') {
+  const value = String(term || '').toLowerCase().trim()
+
+  const weakTerms = new Set([
+    '',
+    'site',
+    'clien.net',
+    'daangn.com',
+    'cafe.naver.com',
+    'www.clien.net',
+    '확인',
+    '찾기',
+    '검색',
+    '조회',
+    '정보',
+    '상태',
+    '방법',
+    '게시글',
+    '관련',
+    '글',
+    '내용',
+  ])
+
+  return weakTerms.has(value)
+}
+
+function isGenericLostTerm(term = '') {
+  const value = String(term || '').toLowerCase().trim()
+
+  const genericLostTerms = new Set([
+    '분실물',
+    '유실물',
+    '분실',
+    '습득',
+  ])
+
+  return genericLostTerms.has(value)
+}
+
+function isRelevantCandidate(item = {}, originalQuery = '') {
+  const title = item.title || ''
+  const snippet = item.snippet || item.description || ''
+
+  // URL은 관련성 판단에서 일부러 제외.
+  // URL/도메인 때문에 관련 있는 것처럼 보이는 문제를 막기 위함.
+  const text = `${title} ${snippet}`.toLowerCase()
+
+  // 제목/스니펫에 분실물 의도가 없으면 제외
+  if (!hasLostItemIntent(text)) {
+    return false
+  }
+
+  const queryTerms = getQueryTerms(originalQuery)
+
+  // 택시/버스/에어팟/지갑 같은 구체 단어가 쿼리에 있으면,
+  // 결과 제목/스니펫에도 최소 하나는 있어야 함.
+  const strongTerms = queryTerms.filter((term) => {
+    const clean = String(term || '').toLowerCase().trim()
+    if (!clean) return false
+    if (clean.length < 2) return false
+    if (isWeakSearchTerm(clean)) return false
+    if (isGenericLostTerm(clean)) return false
+    return true
+  })
+
+  if (strongTerms.length === 0) {
+    return true
+  }
+
+  return strongTerms.some((term) => text.includes(term.toLowerCase()))
+}
+
+function normalizeBraveResults(results = [], siteDomain = '', limit = 20, originalQuery = '') {
   const seen = new Set()
   const output = []
+  let irrelevantCount = 0
 
   for (const item of results || []) {
     const url = item.url || item.link || ''
@@ -133,9 +224,7 @@ function normalizeBraveResults(results = [], siteDomain = '', limit = 20) {
     if (seen.has(url)) continue
     if (!isTargetDomain(url, siteDomain)) continue
 
-    seen.add(url)
-
-    output.push({
+    const normalizedItem = {
       title: item.title || url,
       url,
       source_url: url,
@@ -144,32 +233,53 @@ function normalizeBraveResults(results = [], siteDomain = '', limit = 20) {
       display_link: item.profile?.long_name || domainFromUrl(url),
       source: domainFromUrl(url),
       provider: 'brave',
-    })
+    }
+
+    if (!isRelevantCandidate(normalizedItem, originalQuery)) {
+      irrelevantCount += 1
+      continue
+    }
+
+    seen.add(url)
+    output.push(normalizedItem)
 
     if (output.length >= limit) break
   }
 
-  return output
+  return {
+    results: output,
+    irrelevant_count: irrelevantCount,
+  }
 }
 
-async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = {}) {
+async function braveSearch(query, { limit = 10, siteDomain = '', offset = 0, originalQuery = '' } = {}) {
   const apiKey = getBraveApiKey()
 
   if (!apiKey) {
     return {
       ok: false,
       query,
+      offset,
+      count: limit,
       status: 500,
       error: 'BRAVE_SEARCH_API_KEY가 설정되어 있지 않습니다.',
       results: [],
       raw_count: 0,
+      irrelevant_count: 0,
     }
   }
 
+  // count를 20/10/5로 흔들지 않고 10으로 고정.
+  // Brave 결과가 흔들리는 걸 줄이고, 무관 결과가 섞이는 것을 방지한다.
+  const safeCount = 10
+
+  // Brave API offset은 최대 9까지만 허용.
+  const safeOffset = Math.min(Math.max(Number(offset || 0), 0), 9)
+
   const params = new URLSearchParams({
     q: query,
-    count: String(Math.min(Math.max(Number(limit || 20), 1), 20)),
-    offset: String(Math.max(Number(offset || 0), 0)),
+    count: String(safeCount),
+    offset: String(safeOffset),
     country: 'KR',
     search_lang: 'ko',
     safesearch: 'off',
@@ -199,7 +309,8 @@ async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = 
     return {
       ok: false,
       query,
-      offset,
+      offset: safeOffset,
+      count: safeCount,
       status: res.status,
       error:
         data?.error?.message ||
@@ -208,21 +319,29 @@ async function braveSearch(query, { limit = 20, siteDomain = '', offset = 0 } = 
         `Brave API 오류: ${res.status}`,
       results: [],
       raw_count: 0,
+      irrelevant_count: 0,
       raw: data,
     }
   }
 
   const webResults = data?.web?.results || []
-  const normalized = normalizeBraveResults(webResults, siteDomain, limit)
+  const normalized = normalizeBraveResults(
+    webResults,
+    siteDomain,
+    safeCount,
+    originalQuery || query
+  )
 
   return {
     ok: true,
     query,
-    offset,
+    offset: safeOffset,
+    count: safeCount,
     status: res.status,
     error: null,
-    results: normalized,
+    results: normalized.results,
     raw_count: webResults.length,
+    irrelevant_count: normalized.irrelevant_count,
   }
 }
 
@@ -247,7 +366,6 @@ async function saveCandidatesToSupabase({ supabase, candidates, query, queryId }
     created_at: now,
   }))
 
-  // 현재 DB 스키마 기준: source_url 컬럼 사용
   const attempt1 = await supabase
     .from('search_url_candidates')
     .insert(sourceUrlRows)
@@ -260,7 +378,6 @@ async function saveCandidatesToSupabase({ supabase, candidates, query, queryId }
     }
   }
 
-  // 예전 스키마 대응: url 컬럼 사용
   const urlRows = candidates.map((item, index) => ({
     query_id: queryId || null,
     query_text: query,
@@ -287,7 +404,6 @@ async function saveCandidatesToSupabase({ supabase, candidates, query, queryId }
     }
   }
 
-  // 저장 실패해도 화면에는 URL 후보를 보여줘야 하므로 에러만 반환
   return {
     saved_count: 0,
     error: attempt2.error?.message || attempt1.error?.message || '후보 URL 저장 실패',
@@ -300,6 +416,9 @@ export async function POST(request) {
 
     const query = normalizeSpace(body.query || body.q || body.keyword || '')
     const queryId = body.query_id || body.queryId || null
+
+    // 최종 화면에 표시할 후보 수.
+    // Brave 요청 count는 braveSearch() 내부에서 10으로 고정한다.
     const limit = Math.min(Math.max(Number(body.limit || 20), 1), 20)
 
     if (!query) {
@@ -328,87 +447,103 @@ export async function POST(request) {
     const search_logs = []
 
     let requestCount = 0
-const maxRequests = 3
+    const maxRequests = 3
 
-const originalQuery = queryVariants[0]
-const relaxedQuery = queryVariants[1] || queryVariants[0]
-const coreQuery = queryVariants[2] || queryVariants[1] || queryVariants[0]
+    const originalQuery = queryVariants[0]
+    const relaxedQuery = queryVariants[1] || queryVariants[0]
 
-const searchPlans = [
-  // 1회차: 원본 쿼리
-  { query: originalQuery, offset: 0, mode: 'original' },
+    const searchPlans = [
+      {
+        query: originalQuery,
+        offset: 0,
+        mode: 'original_count_10',
+      },
+      {
+        query: relaxedQuery,
+        offset: 0,
+        mode: 'relaxed_count_10',
+      },
+      {
+        // 같은 완화 쿼리의 뒤쪽 결과를 한 번 더 본다.
+        // offset은 Brave 제한 때문에 9까지만 사용.
+        query: relaxedQuery,
+        offset: 9,
+        mode: 'relaxed_offset_9_count_10',
+      },
+    ]
 
-  // 2회차: 따옴표 제거 완화 쿼리
-  { query: relaxedQuery, offset: 0, mode: 'relaxed' },
+    const seenPlanKeys = new Set()
 
-  // 3회차: Brave API는 offset 최대값이 9라서 20을 넣으면 422 오류가 난다.
-  // 따라서 가능한 최대 offset인 9로 뒤쪽 후보를 한 번 더 확인한다.
-  { query: relaxedQuery || coreQuery, offset: 9, mode: 'relaxed_offset_9' },
-]
+    for (const plan of searchPlans) {
+      if (requestCount >= maxRequests) break
+      if (collected.length >= limit) break
+      if (!plan.query) continue
 
-for (const plan of searchPlans) {
-  if (requestCount >= maxRequests) break
-  if (collected.length >= limit) break
-  if (!plan.query) continue
+      const planKey = `${plan.query}|${plan.offset}`
+      if (seenPlanKeys.has(planKey)) continue
+      seenPlanKeys.add(planKey)
 
-  const result = await braveSearch(plan.query, {
-    limit,
-    siteDomain,
-    offset: plan.offset,
-  })
+      const result = await braveSearch(plan.query, {
+        limit: 10,
+        siteDomain,
+        offset: plan.offset,
+        originalQuery: query,
+      })
 
-  requestCount += 1
+      requestCount += 1
 
-  let addedCount = 0
-  let skippedCrawledCount = 0
-  let skippedDuplicateCount = 0
+      let addedCount = 0
+      let skippedCrawledCount = 0
+      let skippedDuplicateCount = 0
 
-  for (const item of result.results) {
-    const itemUrl = item.url || item.source_url || ''
+      for (const item of result.results) {
+        const itemUrl = item.url || item.source_url || ''
 
-    if (!itemUrl) continue
+        if (!itemUrl) continue
 
-    if (excludeUrls.has(itemUrl)) {
-      skippedCrawledCount += 1
-      continue
+        if (excludeUrls.has(itemUrl)) {
+          skippedCrawledCount += 1
+          continue
+        }
+
+        if (collected.some((existing) => existing.url === itemUrl)) {
+          skippedDuplicateCount += 1
+          continue
+        }
+
+        collected.push({
+          ...item,
+          url: itemUrl,
+          source_url: itemUrl,
+          matched_query: plan.query,
+          matched_offset: plan.offset,
+          matched_mode: plan.mode,
+        })
+
+        addedCount += 1
+
+        if (collected.length >= limit) break
+      }
+
+      search_logs.push({
+        query: plan.query,
+        offset: plan.offset,
+        mode: plan.mode,
+        request_count_value: result.count,
+        ok: result.ok,
+        status: result.status,
+        error: result.error,
+        raw_count: result.raw_count || 0,
+        result_count: result.results.length,
+        added_count: addedCount,
+        skipped_crawled_count: skippedCrawledCount,
+        skipped_duplicate_count: skippedDuplicateCount,
+        skipped_irrelevant_count: result.irrelevant_count || 0,
+        excluded_count: excludeUrls.size,
+      })
+
+      if (collected.length >= limit) break
     }
-
-    if (collected.some((existing) => existing.url === itemUrl)) {
-      skippedDuplicateCount += 1
-      continue
-    }
-
-    collected.push({
-      ...item,
-      url: itemUrl,
-      source_url: itemUrl,
-      matched_query: plan.query,
-      matched_offset: plan.offset,
-      matched_mode: plan.mode,
-    })
-
-    addedCount += 1
-
-    if (collected.length >= limit) break
-  }
-
-  search_logs.push({
-    query: plan.query,
-    offset: plan.offset,
-    mode: plan.mode,
-    ok: result.ok,
-    status: result.status,
-    error: result.error,
-    raw_count: result.raw_count || 0,
-    result_count: result.results.length,
-    added_count: addedCount,
-    skipped_crawled_count: skippedCrawledCount,
-    skipped_duplicate_count: skippedDuplicateCount,
-    excluded_count: excludeUrls.size,
-  })
-
-  if (collected.length >= limit) break
-}
 
     const urls = collected.slice(0, limit)
 
@@ -424,7 +559,7 @@ for (const plan of searchPlans) {
         .from('queries')
         .update({
           candidate_status: urls.length > 0 ? 'candidate_collected' : 'no_results',
-          candidate_error: urls.length > 0 ? null : 'NO_BRAVE_RESULTS',
+          candidate_error: urls.length > 0 ? null : 'NO_NEW_RELEVANT_BRAVE_RESULTS',
         })
         .eq('id', queryId)
     }
@@ -447,7 +582,7 @@ for (const plan of searchPlans) {
       message:
         urls.length > 0
           ? `Brave URL 후보 ${urls.length}개를 불러왔습니다.`
-          : 'Brave URL 후보 0개입니다. 원본 쿼리와 비용 절약형 완화 쿼리까지 시도했지만 새 후보가 없습니다.',
+          : '새로운 관련 Brave URL 후보가 없습니다. 이미 수집된 URL이거나 분실물 관련성이 낮은 결과는 제외했습니다.',
     })
   } catch (error) {
     return json(
