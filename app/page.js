@@ -386,16 +386,15 @@ export default function Home() {
     setErrorMessage('')
 
     try {
-  const res = await fetch('/api/search-urls', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query,
-      query_id: queryId,
-      limit: Number(candidateLimit || 20),
-
-    }),
-  })
+      const res = await fetch('/api/search-urls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          query_id: queryId,
+          limit: Number(candidateLimit || 20),
+        }),
+      })
 
       const data = await readJsonResponse(res)
 
@@ -480,68 +479,67 @@ export default function Home() {
           </div>
 
           <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm">
-  <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-extrabold text-slate-900">사용법</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    정보찾아줌에서 쿼리를 생성한 뒤, 이 검색 대시보드에서 URL 후보 수집과 본문 수집을 진행합니다.
+                  </p>
+                </div>
 
-    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-  <div>
-    <h2 className="text-lg font-extrabold text-slate-900">사용법</h2>
-    <p className="mt-1 text-sm leading-6 text-slate-600">
-      정보찾아줌에서 쿼리를 생성한 뒤, 이 검색 대시보드에서 URL 후보 수집과 본문 수집을 진행합니다.
-    </p>
-  </div>
+                <a
+                  href="https://jeongbochajajum.pages.dev/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700"
+                >
+                  정보찾아줌 바로가기
+                </a>
+              </div>
 
-  <a
-    href="https://jeongbochajajum.pages.dev/"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700"
-  >
-    정보찾아줌 바로가기
-  </a>
-</div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-indigo-500">STEP 1</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 불러오기</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    정보찾아줌 원본 쿼리 또는 정제 대표 쿼리 버튼을 눌러 검색 쿼리 목록을 불러옵니다.
+                  </p>
+                </div>
 
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
-        <p className="text-xs font-bold text-indigo-500">STEP 1</p>
-        <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 불러오기</h3>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          정보찾아줌 원본 쿼리 또는 정제 대표 쿼리 버튼을 눌러 검색 쿼리 목록을 불러옵니다.
-        </p>
-      </div>
+                <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-indigo-500">STEP 2</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 선택</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    쿼리 카드를 클릭하면 단일 쿼리 입력창에 적용되고, Google 검색 결과가 새 탭으로 열립니다.
+                  </p>
+                </div>
 
-      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
-        <p className="text-xs font-bold text-indigo-500">STEP 2</p>
-        <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 선택</h3>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          쿼리 카드를 클릭하면 단일 쿼리 입력창에 적용됩니다. 연결 설정 시 Google 검색 결과도 새 탭으로 열 수 있습니다.
-        </p>
-      </div>
+                <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-indigo-500">STEP 3</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">URL 후보 수집</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    검색 결과가 괜찮은 쿼리는 Brave URL 후보 수집 버튼을 눌러 관련 게시글 링크를 가져옵니다.
+                  </p>
+                </div>
 
-      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
-        <p className="text-xs font-bold text-indigo-500">STEP 3</p>
-        <h3 className="mt-1 text-sm font-bold text-slate-900">URL 후보 수집</h3>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          검색 결과가 괜찮은 쿼리는 URL 후보 수집 버튼을 눌러 관련 게시글 링크를 가져옵니다.
-        </p>
-      </div>
+                <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-indigo-500">STEP 4</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">본문 수집</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    필요한 URL을 선택하거나 직접 붙여넣어 게시글 제목, 본문, 날짜, 키워드를 수집합니다.
+                  </p>
+                </div>
+              </div>
 
-      <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
-        <p className="text-xs font-bold text-indigo-500">STEP 4</p>
-        <h3 className="mt-1 text-sm font-bold text-slate-900">본문 수집</h3>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          필요한 URL을 선택하거나 직접 붙여넣어 게시글 제목, 본문, 날짜, 키워드를 수집합니다.
-        </p>
-      </div>
-    </div>
-
-    <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-      <p className="text-xs leading-5 text-amber-800">
-        권장 방식: 쿼리를 무작정 많이 돌리기보다, Google에서 먼저 검색 결과가 나오는지 확인한 뒤
-        의미 있는 쿼리만 URL 후보 수집으로 넘기는 것이 좋습니다.
-      </p>
-    </div>
-  </div>
-</section>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                <p className="text-xs leading-5 text-amber-800">
+                  권장 방식: 쿼리를 무작정 많이 돌리기보다, Google에서 먼저 검색 결과가 나오는지 확인한 뒤
+                  의미 있는 쿼리만 URL 후보 수집으로 넘기는 것이 좋습니다.
+                </p>
+              </div>
+            </div>
+          </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
@@ -671,7 +669,7 @@ export default function Home() {
               <input
                 type="number"
                 min="1"
-                max="100"
+                max="20"
                 value={candidateLimit}
                 onChange={(e) => setCandidateLimit(e.target.value)}
                 className="rounded-xl border px-3 py-2"
@@ -682,13 +680,12 @@ export default function Home() {
                 disabled={candidateLoading}
                 className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {candidateLoading ? '수집 중...' : 'URL 후보 수집'}
+                {candidateLoading ? '수집 중...' : 'Brave URL 후보 수집'}
               </button>
             </div>
 
             <p className="mt-2 text-xs leading-5 text-slate-500">
-             클릭 시 Brave Search API가 호출됩니다. 같은 쿼리를 다시 수집할 경우 이미 화면에 표시된 URL은 제외하고 새 후보만 가져옵니다.
-             비용은 검색 요청 기준으로 계산되며, 현재 설정은 클릭 1회당 최대 3회 요청까지 시도합니다.
+              클릭 시 Brave Search API가 1회 호출됩니다. 입력한 쿼리 그대로 검색하며, 결과 품질은 쿼리 조건에 따라 달라질 수 있습니다.
             </p>
 
             {dbQueries.length > 0 && (
@@ -777,22 +774,22 @@ export default function Home() {
 
                     return (
                       <button
-                       key={row.id || `${q}-${index}`}
-                       type="button"
-                       onClick={() => {
-                         setCandidateQuery(q)
-                         openGoogleSearch(q)
-                       }}
-                       className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                         candidateQuery === q
-                           ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-                           : 'border-slate-200 bg-white text-gray-700 hover:bg-slate-100'
-                       }`}
+                        key={row.id || `${q}-${index}`}
+                        type="button"
+                        onClick={() => {
+                          setCandidateQuery(q)
+                          openGoogleSearch(q)
+                        }}
+                        className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          candidateQuery === q
+                            ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                            : 'border-slate-200 bg-white text-gray-700 hover:bg-slate-100'
+                        }`}
                       >
-                       <div className="mb-1 text-[11px] text-gray-400">
-                         {row.source_table || 'query'} · {row.candidate_status || 'pending'}
-                       </div>
-                       <div className="line-clamp-2 font-semibold leading-5">{q}</div>
+                        <div className="mb-1 text-[11px] text-gray-400">
+                          {row.source_table || 'query'} · {row.candidate_status || 'pending'}
+                        </div>
+                        <div className="line-clamp-2 font-semibold leading-5">{q}</div>
                       </button>
                     )
                   })}
@@ -854,34 +851,34 @@ export default function Home() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-  <h2 className="text-lg font-bold text-gray-800">URL 직접 붙여넣기 본문 수집</h2>
-  <p className="mt-1 text-sm text-gray-500">
-    검색 API가 막혔을 때 URL 여러 개를 직접 붙여넣어 본문만 수집합니다.
-  </p>
+            <h2 className="text-lg font-bold text-gray-800">URL 직접 붙여넣기 본문 수집</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              검색 API가 막혔을 때 URL 여러 개를 직접 붙여넣어 본문만 수집합니다.
+            </p>
 
-  <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
-    <textarea
-      value={manualUrls}
-      onChange={(e) => setManualUrls(e.target.value)}
-      rows={4}
-      placeholder="URL을 줄바꿈으로 붙여넣기"
-      className="rounded-xl border px-3 py-2"
-    />
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+              <textarea
+                value={manualUrls}
+                onChange={(e) => setManualUrls(e.target.value)}
+                rows={4}
+                placeholder="URL을 줄바꿈으로 붙여넣기"
+                className="rounded-xl border px-3 py-2"
+              />
 
-    <button
-      onClick={() =>
-        handleCrawlUrls(
-          splitUrls(manualUrls),
-          candidateQuery || '직접 URL 수집'
-        )
-      }
-      disabled={crawlLoading || manualUrlCount === 0}
-      className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-    >
-      {crawlLoading ? '수집 중...' : `URL ${manualUrlCount}개 본문 수집`}
-    </button>
-  </div>
-</section>
+              <button
+                onClick={() =>
+                  handleCrawlUrls(
+                    splitUrls(manualUrls),
+                    candidateQuery || '직접 URL 수집'
+                  )
+                }
+                disabled={crawlLoading || manualUrlCount === 0}
+                className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {crawlLoading ? '수집 중...' : `URL ${manualUrlCount}개 본문 수집`}
+              </button>
+            </div>
+          </section>
 
           {message && (
             <div className="rounded-xl border-l-4 border-indigo-400 bg-white px-4 py-3 text-sm text-gray-700 shadow">
