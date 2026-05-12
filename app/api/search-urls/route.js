@@ -183,33 +183,42 @@ function isRelevantCandidate(item = {}, originalQuery = '') {
   const title = item.title || ''
   const snippet = item.snippet || item.description || ''
 
-  // URL은 관련성 판단에서 일부러 제외.
-  // URL/도메인 때문에 관련 있는 것처럼 보이는 문제를 막기 위함.
+  // URL은 관련성 판단에서 제외.
+  // 도메인이나 URL 경로 때문에 관련 있어 보이는 문제를 막기 위함.
   const text = `${title} ${snippet}`.toLowerCase()
 
-  // 제목/스니펫에 분실물 의도가 없으면 제외
-  if (!hasLostItemIntent(text)) {
+  // 1. 제목/스니펫에 분실물 관련 의도가 있으면 통과
+  // 예: 분실물, 유실물, 분실, 습득, 잃어버림, 두고 내림 등
+  if (hasLostItemIntent(text)) {
+    return true
+  }
+
+  // 2. Brave 스니펫이 너무 짧게 들어오는 경우를 대비한 보조 판정
+  // 쿼리 자체가 분실물 계열이고, 결과 제목/스니펫에 찾기/확인/신고/보관 같은 행동어가 있으면 통과
+  const queryHasLostIntent = hasLostItemIntent(originalQuery)
+
+  if (!queryHasLostIntent) {
     return false
   }
 
-  const queryTerms = getQueryTerms(originalQuery)
+  const supportTerms = [
+    '찾기',
+    '찾는',
+    '찾아',
+    '확인',
+    '신고',
+    '접수',
+    '보관',
+    '주웠',
+    '주운',
+    '찾아가',
+    '연락',
+    '분실센터',
+    '유실물센터',
+    'lost112',
+  ]
 
-  // 택시/버스/에어팟/지갑 같은 구체 단어가 쿼리에 있으면,
-  // 결과 제목/스니펫에도 최소 하나는 있어야 함.
-  const strongTerms = queryTerms.filter((term) => {
-    const clean = String(term || '').toLowerCase().trim()
-    if (!clean) return false
-    if (clean.length < 2) return false
-    if (isWeakSearchTerm(clean)) return false
-    if (isGenericLostTerm(clean)) return false
-    return true
-  })
-
-  if (strongTerms.length === 0) {
-    return true
-  }
-
-  return strongTerms.some((term) => text.includes(term.toLowerCase()))
+  return supportTerms.some((term) => text.includes(term.toLowerCase()))
 }
 
 function normalizeBraveResults(results = [], siteDomain = '', limit = 20, originalQuery = '') {
