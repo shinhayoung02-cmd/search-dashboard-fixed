@@ -88,19 +88,139 @@ function buildBraveQueryVariants(originalQuery = '') {
   const variants = []
 
   // 1차: 원본 쿼리
-  // 예: site:clien.net "분실물" "확인" "찾기"
+  // 예: site:clien.net "분실물" "카페" "습득"
   if (original) variants.push(original)
 
-  // 2차: 따옴표 제거
-  // 예: site:clien.net 분실물 확인 찾기
+  // 2차: 따옴표만 제거
+  // 예: site:clien.net 분실물 카페 습득
   if (withoutQuotes && withoutQuotes !== original) {
     variants.push(withoutQuotes)
   }
 
-  // 여기서 site:clien.net 분실물 같은 과도한 핵심어 fallback은 일부러 만들지 않음.
-  // 너무 넓어져서 분실물과 상관없는 결과가 섞이는 원인이 됨.
-
+  // site:clien.net 분실물 같은 과도하게 넓은 fallback은 만들지 않음.
+  // 이게 관련 없는 URL을 끌어오는 주요 원인이다.
   return Array.from(new Set(variants.map(normalizeSpace).filter(Boolean))).slice(0, 2)
+}
+
+function getQueryTerms(query = '') {
+  const quoted = extractQuotedTerms(query)
+
+  const stripped = stripQuotes(stripSiteOperator(query))
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+
+  return Array.from(new Set([...quoted, ...stripped]))
+}
+
+function hasLostItemIntent(text = '') {
+  const value = String(text || '').toLowerCase()
+
+  const lostItemTerms = [
+    '분실물',
+    '유실물',
+    '분실',
+    '습득',
+    '잃어버',
+    '잃어 버',
+    '잃어버렸',
+    '두고 내',
+    '두고내',
+    '놓고 내',
+    '놓고내',
+    '주웠',
+    '주운',
+    '찾아가',
+    '찾아주세요',
+    '보관중',
+    '분실신고',
+    '유실물 신고',
+    '유실물센터',
+    '분실물센터',
+    'lost112',
+  ]
+
+  return lostItemTerms.some((term) => value.includes(term.toLowerCase()))
+}
+
+function isWeakSearchTerm(term = '') {
+  const value = String(term || '').toLowerCase().trim()
+
+  const weakTerms = new Set([
+    '',
+    'site',
+    'clien.net',
+    'daangn.com',
+    'cafe.naver.com',
+    'www.clien.net',
+    '확인',
+    '찾기',
+    '검색',
+    '조회',
+    '정보',
+    '상태',
+    '방법',
+    '게시글',
+    '관련',
+    '글',
+    '내용',
+    '문의',
+    '댓글',
+  ])
+
+  return weakTerms.has(value)
+}
+
+function isGenericLostTerm(term = '') {
+  const value = String(term || '').toLowerCase().trim()
+
+  const genericLostTerms = new Set([
+    '분실물',
+    '유실물',
+    '분실',
+    '습득',
+    '잃어버림',
+    '잃어버린',
+  ])
+
+  return genericLostTerms.has(value)
+}
+
+function getStrongQueryTerms(query = '') {
+  return getQueryTerms(query).filter((term) => {
+    const clean = String(term || '').toLowerCase().trim()
+
+    if (!clean) return false
+    if (clean.length < 2) return false
+    if (isWeakSearchTerm(clean)) return false
+    if (isGenericLostTerm(clean)) return false
+
+    return true
+  })
+}
+
+function isRelevantCandidate(item = {}, originalQuery = '') {
+  const title = item.title || ''
+  const snippet = item.snippet || item.description || ''
+
+  // URL은 관련성 판단에서 제외.
+  // 도메인/경로 때문에 관련 있어 보이는 문제를 막는다.
+  const text = `${title} ${snippet}`.toLowerCase()
+
+  // 1. 제목/스니펫에 분실물 계열 단어가 없으면 무조건 제외
+  if (!hasLostItemIntent(text)) {
+    return false
+  }
+
+  // 2. 쿼리에 구체 단어가 있으면 제목/스니펫에도 있어야 통과
+  // 예: "카페", "버스", "지갑", "에어팟", "택시"
+  const strongTerms = getStrongQueryTerms(originalQuery)
+
+  if (strongTerms.length === 0) {
+    return true
+  }
+
+  return strongTerms.some((term) => text.includes(term.toLowerCase()))
 }
 
 function getQueryTerms(query = '') {
