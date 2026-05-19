@@ -210,6 +210,31 @@ function sortResults(items = [], mode = 'latest') {
   })
 }
 
+
+const BOOKMARKLET_ITEMS = [
+  {
+    key: 'google',
+    label: 'Google',
+    title: 'Google 검색결과 URL 추출',
+    description: 'Google 검색 결과 화면에서 실제 외부 게시글 URL만 최대한 추려 복사합니다.',
+    code: `javascript:(()=>{const urls=[...document.querySelectorAll('a[href]')].map(a=>a.href).map(h=>{try{const u=new URL(h);if(u.hostname.includes('google.')&&u.pathname==='/url')return u.searchParams.get('q')||u.searchParams.get('url')||h;return h}catch(e){return h}}).filter(Boolean).filter(h=>/^https?:\/\//.test(h)).filter(h=>{try{const u=new URL(h);const host=u.hostname;return !host.includes('google.')&&!h.includes('/search?')&&!h.includes('webcache')&&!h.includes('accounts.google')}catch(e){return false}});const out=[...new Set(urls)];copy(out.join('\n'));alert('Google URL '+out.length+'개 복사 완료');function copy(t){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}})()`,
+  },
+  {
+    key: 'naver',
+    label: 'Naver',
+    title: '네이버 검색결과 URL 추출',
+    description: '네이버 통합검색 결과 화면에서 검색 결과 링크를 복사합니다.',
+    code: `javascript:(()=>{const urls=[...document.querySelectorAll('a[href]')].map(a=>a.href).filter(Boolean).filter(h=>/^https?:\/\//.test(h)).filter(h=>{try{const u=new URL(h);const host=u.hostname;return !host.includes('search.naver.com')&&!host.includes('ssl.pstatic.net')&&!host.includes('help.naver.com')&&!h.includes('javascript:')}catch(e){return false}});const out=[...new Set(urls)];copy(out.join('\n'));alert('Naver URL '+out.length+'개 복사 완료');function copy(t){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}})()`,
+  },
+  {
+    key: 'naverCafe',
+    label: 'Naver Cafe',
+    title: '네이버 카페 URL 추출',
+    description: '네이버 카페 검색/목록/게시글 화면에서 cafe.naver.com 링크만 골라 복사합니다.',
+    code: `javascript:(()=>{const urls=[...document.querySelectorAll('a[href]')].map(a=>a.href).filter(Boolean).filter(h=>/^https?:\/\//.test(h)).filter(h=>h.includes('cafe.naver.com')||h.includes('naver.com/ca-fe')).map(h=>h.replace(/#.*$/,''));const out=[...new Set(urls)];copy(out.join('\n'));alert('Naver Cafe URL '+out.length+'개 복사 완료');function copy(t){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}})()`,
+  },
+]
+
 export default function Home() {
   const [results, setResults] = useState([])
   const [total, setTotal] = useState(0)
@@ -253,6 +278,8 @@ export default function Home() {
   const [folderActionLoading, setFolderActionLoading] = useState(false)
   const [selectedResultIds, setSelectedResultIds] = useState([])
   const [resultSortMode, setResultSortMode] = useState('latest')
+  const [bookmarkletGuideOpen, setBookmarkletGuideOpen] = useState(false)
+  const [copiedBookmarkletKey, setCopiedBookmarkletKey] = useState('')
 
   const currentResultPageSize = resultSortMode === 'channel' ? RESULT_PAGE_SIZE_CHANNEL : RESULT_PAGE_SIZE_LATEST
   const totalPages = Math.ceil(total / currentResultPageSize)
@@ -286,6 +313,26 @@ export default function Home() {
     queryMode === 'raw'
       ? '정보찾아줌에서 Supabase 저장한 원본 쿼리입니다. 클릭하면 단일 쿼리 입력창에 적용됩니다.'
       : '정제 후 대표 쿼리 만들기를 통해 생성된 대표 쿼리입니다. 클릭하면 단일 쿼리 입력창에 적용됩니다.'
+
+  const copyBookmarkletCode = async (bookmarklet) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(bookmarklet.code)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = bookmarklet.code
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        textarea.remove()
+      }
+
+      setCopiedBookmarkletKey(bookmarklet.key)
+      setMessage(`${bookmarklet.title} 북마클릿 코드를 복사했습니다. 즐겨찾기 URL 칸에 붙여넣으면 됩니다.`)
+    } catch (err) {
+      setErrorMessage(err.message || '북마클릿 코드 복사에 실패했습니다.')
+    }
+  }
 
   const fetchFolders = useCallback(async () => {
     setFoldersLoading(true)
@@ -884,11 +931,87 @@ export default function Home() {
                 </div>
 
                 <div className="rounded-xl border border-indigo-100 bg-white px-4 py-3">
-                  <p className="text-xs font-bold text-indigo-700">북마클릿 사용 흐름</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    1) 브라우저 즐겨찾기바에 북마클릿을 저장합니다. 2) 검색 결과 페이지에서 북마클릿을 누릅니다.
-                    3) 추출된 URL을 복사해 “URL 직접 붙여넣기 본문 수집” 칸에 붙여넣습니다.
-                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-indigo-700">북마클릿 바로 추가 / 복사</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">
+                        Google, 네이버, 네이버 카페용 북마클릿을 복사하거나 즐겨찾기바로 드래그해서 추가합니다.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setBookmarkletGuideOpen((value) => !value)}
+                      className="inline-flex shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
+                    >
+                      {bookmarkletGuideOpen ? '북마클릿 설명 접기' : '북마클릿 설명 펼치기'}
+                    </button>
+                  </div>
+
+                  {bookmarkletGuideOpen && (
+                    <div className="mt-4 space-y-4">
+                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                        {BOOKMARKLET_ITEMS.map((bookmarklet) => (
+                          <div
+                            key={bookmarklet.key}
+                            className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-extrabold uppercase tracking-wide text-indigo-500">
+                                  {bookmarklet.label}
+                                </p>
+                                <h3 className="mt-1 text-sm font-extrabold text-slate-900">
+                                  {bookmarklet.title}
+                                </h3>
+                              </div>
+                              {copiedBookmarkletKey === bookmarklet.key && (
+                                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
+                                  복사됨
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="mt-2 text-xs leading-5 text-slate-500">
+                              {bookmarklet.description}
+                            </p>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => copyBookmarkletCode(bookmarklet)}
+                                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-700"
+                              >
+                                북마클릿 코드 복사
+                              </button>
+
+                              <a
+                                href={bookmarklet.code}
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  setMessage('이 버튼은 클릭이 아니라 즐겨찾기바로 드래그해서 추가하세요. 복사가 필요하면 “북마클릿 코드 복사”를 누르세요.')
+                                }}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                즐겨찾기바로 드래그
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                        <p className="text-xs font-bold text-amber-800">만드는 방법</p>
+                        <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-5 text-amber-800">
+                          <li>브라우저에서 즐겨찾기바를 켭니다. Chrome 기준 Ctrl+Shift+B입니다.</li>
+                          <li>위의 “즐겨찾기바로 드래그” 버튼을 즐겨찾기바에 끌어다 놓습니다.</li>
+                          <li>드래그가 안 되면 “북마클릿 코드 복사”를 누른 뒤, 새 북마크를 만들고 URL 칸에 붙여넣습니다.</li>
+                          <li>Google·네이버·네이버 카페 검색 결과 페이지에서 해당 북마클릿을 누르면 URL 목록이 클립보드에 복사됩니다.</li>
+                          <li>복사된 URL을 아래 “URL 직접 붙여넣기 본문 수집” 칸에 붙여넣고, 수집 쿼리·분류명을 입력한 뒤 본문 수집을 누릅니다.</li>
+                        </ol>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
