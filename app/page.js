@@ -119,6 +119,43 @@ function groupResultsBySite(items = []) {
     }))
 }
 
+function getResultTime(item = {}) {
+  const candidates = [
+    item.published_at,
+    item.post_date,
+    item.article_date,
+    item.created_at,
+    item.updated_at,
+  ]
+
+  for (const value of candidates) {
+    if (!value) continue
+    const time = new Date(value).getTime()
+    if (!Number.isNaN(time)) return time
+  }
+
+  return 0
+}
+
+function sortResults(items = [], mode = 'latest') {
+  const siteOrder = ['daangn', 'naverCafe', 'clien', 'joongna', 'bunjang', 'etc']
+  const siteRank = new Map(siteOrder.map((key, index) => [key, index]))
+
+  return [...items].sort((a, b) => {
+    if (mode === 'channel') {
+      const channelDiff =
+        (siteRank.get(getSiteKey(a)) ?? 999) - (siteRank.get(getSiteKey(b)) ?? 999)
+
+      if (channelDiff !== 0) return channelDiff
+    }
+
+    const timeDiff = getResultTime(b) - getResultTime(a)
+    if (timeDiff !== 0) return timeDiff
+
+    return String(a.title || '').localeCompare(String(b.title || ''), 'ko')
+  })
+}
+
 export default function Home() {
   const [results, setResults] = useState([])
   const [total, setTotal] = useState(0)
@@ -161,13 +198,15 @@ export default function Home() {
   const [targetFolderId, setTargetFolderId] = useState('')
   const [folderActionLoading, setFolderActionLoading] = useState(false)
   const [selectedResultIds, setSelectedResultIds] = useState([])
+  const [resultSortMode, setResultSortMode] = useState('latest')
 
   const totalPages = Math.ceil(total / 12)
 
   const selectedCount = selectedUrls.length
   const selectedResultCount = selectedResultIds.length
   const manualUrlCount = useMemo(() => splitUrls(manualUrls).length, [manualUrls])
-  const groupedResults = useMemo(() => groupResultsBySite(results), [results])
+  const sortedResults = useMemo(() => sortResults(results, resultSortMode), [results, resultSortMode])
+  const groupedResults = useMemo(() => groupResultsBySite(sortedResults), [sortedResults])
   const activeFolder = useMemo(
     () => folders.find((folder) => String(folder.id) === String(selectedFolderId)) || null,
     [folders, selectedFolderId]
@@ -177,8 +216,8 @@ export default function Home() {
     [folders, targetFolderId]
   )
   const visibleResultIds = useMemo(
-    () => results.map((item) => item.id).filter(Boolean),
-    [results]
+    () => sortedResults.map((item) => item.id).filter(Boolean),
+    [sortedResults]
   )
   const allVisibleResultsSelected =
     visibleResultIds.length > 0 && visibleResultIds.every((id) => selectedResultIds.includes(id))
@@ -1345,16 +1384,44 @@ export default function Home() {
           )}
         </div>
 
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-gray-500">
-            {activeFolder ? `“${activeFolder.name}” 폴더 결과 ${total}개` : `총 ${total}개 결과`}
-          </p>
-
-          {selectedResultCount > 0 && (
-            <p className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-              결과 카드 {selectedResultCount}개 선택됨
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-gray-500">
+              {activeFolder ? `“${activeFolder.name}” 폴더 결과 ${total}개` : `총 ${total}개 결과`}
             </p>
-          )}
+
+            {selectedResultCount > 0 && (
+              <p className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                결과 카드 {selectedResultCount}개 선택됨
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            <span className="px-2 text-xs font-bold text-slate-500">결과 정렬</span>
+            <button
+              type="button"
+              onClick={() => setResultSortMode('latest')}
+              className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                resultSortMode === 'latest'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              최신순
+            </button>
+            <button
+              type="button"
+              onClick={() => setResultSortMode('channel')}
+              className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                resultSortMode === 'channel'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              채널순
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -1364,6 +1431,53 @@ export default function Home() {
             <p className="mb-3 text-4xl">📭</p>
             <p>결과가 없습니다. URL 후보를 수집하거나 직접 URL을 붙여넣어보세요.</p>
           </div>
+        ) : resultSortMode === 'latest' ? (
+          <section className="space-y-4">
+            <div className="flex items-end justify-between border-b border-slate-200 pb-2">
+              <div>
+                <h2 className="text-xl font-extrabold tracking-tight text-gray-900">최신순 결과</h2>
+                <p className="mt-1 text-xs text-gray-500">수집·게시 날짜 기준으로 최근 결과를 먼저 보여줍니다.</p>
+              </div>
+
+              <div className="text-sm font-semibold text-gray-400">
+                {sortedResults.length}개
+              </div>
+            </div>
+
+            <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {sortedResults.map((item) => {
+                const siteMeta = SITE_META[getSiteKey(item)] || SITE_META.etc
+
+                return (
+                  <div
+                    key={item.id || item.url}
+                    className={`min-w-0 w-full rounded-2xl border p-2 transition ${
+                      selectedResultIds.includes(item.id)
+                        ? 'border-indigo-300 bg-indigo-50/40'
+                        : 'border-transparent'
+                    }`}
+                  >
+                    <label className="mb-2 flex cursor-pointer items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedResultIds.includes(item.id)}
+                          onChange={() => toggleResultSelection(item.id)}
+                          disabled={!item.id}
+                        />
+                        <span>이 결과 카드 선택</span>
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-500">
+                        {siteMeta.label}
+                      </span>
+                    </label>
+
+                    <ResultCard item={item} />
+                  </div>
+                )
+              })}
+            </div>
+          </section>
         ) : (
           <div className="space-y-12">
             {groupedResults.map((group) => (
