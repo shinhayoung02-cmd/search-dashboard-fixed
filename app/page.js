@@ -825,7 +825,7 @@ export default function Home() {
                 </a>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
                 <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
                   <p className="text-xs font-bold text-indigo-500">STEP 1</p>
                   <h3 className="mt-1 text-sm font-bold text-slate-900">쿼리 불러오기</h3>
@@ -852,18 +852,44 @@ export default function Home() {
 
                 <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
                   <p className="text-xs font-bold text-indigo-500">STEP 4</p>
-                  <h3 className="mt-1 text-sm font-bold text-slate-900">본문 수집</h3>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">북마클릿 URL 추출</h3>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    필요한 URL을 선택하거나 직접 붙여넣어 게시글 제목, 본문, 날짜, 키워드를 수집합니다.
+                    Google·네이버 검색 결과 페이지에서 북마클릿을 실행해 화면에 보이는 URL 목록을 한 번에 복사합니다.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-indigo-500">STEP 5</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">직접 URL 붙여넣기</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    북마클릿으로 뽑은 URL을 직접 붙여넣고, 수집 쿼리·분류명을 함께 입력합니다.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-indigo-500">STEP 6</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">본문 수집·분류</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    게시글 제목, 본문, 날짜, 키워드를 수집한 뒤 결과 카드를 폴더별로 선택해 분류합니다.
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-                <p className="text-xs leading-5 text-amber-800">
-                  권장 방식: 쿼리를 무작정 많이 돌리기보다, Google에서 먼저 검색 결과가 나오는지 확인한 뒤
-                  의미 있는 쿼리만 URL 후보 수집으로 넘기는 것이 좋습니다.
-                </p>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                  <p className="text-xs leading-5 text-amber-800">
+                    권장 방식: 쿼리를 무작정 많이 돌리기보다, Google에서 먼저 검색 결과가 나오는지 확인한 뒤
+                    의미 있는 쿼리만 URL 후보 수집 또는 북마클릿 수집으로 넘기는 것이 좋습니다.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-indigo-100 bg-white px-4 py-3">
+                  <p className="text-xs font-bold text-indigo-700">북마클릿 사용 흐름</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    1) 브라우저 즐겨찾기바에 북마클릿을 저장합니다. 2) 검색 결과 페이지에서 북마클릿을 누릅니다.
+                    3) 추출된 URL을 복사해 “URL 직접 붙여넣기 본문 수집” 칸에 붙여넣습니다.
+                  </p>
+                </div>
               </div>
             </div>
           </section>
