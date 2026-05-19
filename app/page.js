@@ -35,24 +35,59 @@ function splitUrls(text = '') {
 }
 
 function getSiteKey(item = {}) {
-  const source = [
-    item.source,
-    item.site,
+  // 1순위: 실제 게시글 URL 기준으로 채널 판별
+  // keyword/title에 "당근" 같은 단어가 섞여 있어도 URL이 중고나라면 중고나라로 잡히게 함.
+  const urlSource = [
     item.url,
     item.source_url,
-    item.display_link,
-    item.keyword,
-    item.title,
+    item.link,
+    item.href,
   ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
 
-  if (source.includes('daangn') || source.includes('당근')) return 'daangn'
-  if (source.includes('cafe.naver') || source.includes('네이버 카페') || source.includes('네이버카페')) return 'naverCafe'
-  if (source.includes('clien') || source.includes('클리앙')) return 'clien'
-  if (source.includes('joongna') || source.includes('중고나라')) return 'joongna'
-  if (source.includes('bunjang') || source.includes('번개장터')) return 'bunjang'
+  if (urlSource.includes('joongna') || urlSource.includes('web.joongna.com')) return 'joongna'
+  if (urlSource.includes('bunjang')) return 'bunjang'
+  if (urlSource.includes('cafe.naver.com')) return 'naverCafe'
+  if (urlSource.includes('clien.net')) return 'clien'
+  if (urlSource.includes('daangn.com')) return 'daangn'
+
+  // 2순위: source/site/display_link 같은 도메인성 필드 기준
+  const domainSource = [
+    item.source,
+    item.site,
+    item.display_link,
+    item.domain,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  if (domainSource.includes('joongna') || domainSource.includes('web.joongna.com') || domainSource.includes('중고나라')) return 'joongna'
+  if (domainSource.includes('bunjang') || domainSource.includes('번개장터')) return 'bunjang'
+  if (domainSource.includes('cafe.naver') || domainSource.includes('네이버 카페') || domainSource.includes('네이버카페')) return 'naverCafe'
+  if (domainSource.includes('clien') || domainSource.includes('클리앙')) return 'clien'
+  if (domainSource.includes('daangn') || domainSource.includes('당근')) return 'daangn'
+
+  // 3순위: 텍스트/키워드 보조 판별
+  // 이 단계는 URL/도메인에서 못 잡을 때만 사용함.
+  const textSource = [
+    item.keyword,
+    item.title,
+    item.description,
+    item.snippet,
+    item.detail_body,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  if (textSource.includes('중고나라') || textSource.includes('joongna')) return 'joongna'
+  if (textSource.includes('번개장터') || textSource.includes('bunjang')) return 'bunjang'
+  if (textSource.includes('네이버 카페') || textSource.includes('네이버카페') || textSource.includes('cafe.naver')) return 'naverCafe'
+  if (textSource.includes('클리앙') || textSource.includes('clien')) return 'clien'
+  if (textSource.includes('당근') || textSource.includes('daangn')) return 'daangn'
 
   return 'etc'
 }
