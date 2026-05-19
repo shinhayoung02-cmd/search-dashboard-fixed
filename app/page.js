@@ -150,6 +150,7 @@ export default function Home() {
   const [pipelineStats, setPipelineStats] = useState(null)
 
   const [manualUrls, setManualUrls] = useState('')
+  const [manualKeyword, setManualKeyword] = useState('')
   const [crawlLoading, setCrawlLoading] = useState(false)
 
   const [folders, setFolders] = useState([])
@@ -1079,10 +1080,25 @@ export default function Home() {
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-lg font-bold text-gray-800">URL 직접 붙여넣기 본문 수집</h2>
             <p className="mt-1 text-sm text-gray-500">
-              검색 API가 막혔을 때 URL 여러 개를 직접 붙여넣어 본문만 수집합니다.
+              검색 API가 막혔을 때 URL 여러 개를 직접 붙여넣어 본문만 수집합니다. 아래 쿼리/분류명을 입력하면 Supabase results.keyword에 함께 저장됩니다.
             </p>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+            <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(260px,420px)_1fr_auto]">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-slate-700">
+                  직접 URL 수집 쿼리 / 분류명
+                </label>
+                <input
+                  value={manualKeyword}
+                  onChange={(e) => setManualKeyword(e.target.value)}
+                  placeholder='예: site:daangn.com "분실물" "댓글" 또는 RQ2 식별 단서'
+                  className="rounded-xl border px-3 py-2 text-sm"
+                />
+                <p className="text-xs leading-5 text-slate-500">
+                  비워두면 현재 단일 쿼리 입력값을 사용하고, 그것도 없으면 “직접 URL 수집”으로 저장됩니다.
+                </p>
+              </div>
+
               <textarea
                 value={manualUrls}
                 onChange={(e) => setManualUrls(e.target.value)}
@@ -1095,7 +1111,7 @@ export default function Home() {
                 onClick={() =>
                   handleCrawlUrls(
                     splitUrls(manualUrls),
-                    candidateQuery || '직접 URL 수집'
+                    manualKeyword.trim() || candidateQuery || '직접 URL 수집'
                   )
                 }
                 disabled={crawlLoading || manualUrlCount === 0}
