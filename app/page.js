@@ -1218,45 +1218,99 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {foldersLoading ? (
-                  <span className="rounded-full border bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
-                    폴더 불러오는 중...
-                  </span>
-                ) : folders.length === 0 ? (
-                  <span className="rounded-full border bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
-                    아직 만든 폴더가 없습니다.
-                  </span>
-                ) : (
-                  folders.map((folder) => (
-                    <button
-                      key={folder.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFolderId(folder.id)
-                        setPage(1)
-                        setSelectedResultIds([])
-                      }}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                        selectedFolderId === folder.id
-                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-                          : 'bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {folder.name} · {folder.item_count || 0}개
-                    </button>
-                  ))
-                )}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">생성된 폴더</h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      폴더 카드를 누르면 해당 폴더에 담긴 결과만 크게 확인할 수 있습니다.
+                    </p>
+                  </div>
 
-                {selectedFolderId && (
-                  <button
-                    type="button"
-                    onClick={handleDeleteFolder}
-                    disabled={folderActionLoading}
-                    className="rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-40"
-                  >
-                    현재 폴더 삭제
-                  </button>
+                  {selectedFolderId && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteFolder}
+                      disabled={folderActionLoading}
+                      className="self-start rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 shadow-sm disabled:opacity-40 sm:self-auto"
+                    >
+                      현재 폴더 삭제
+                    </button>
+                  )}
+                </div>
+
+                {foldersLoading ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500">
+                    폴더 불러오는 중...
+                  </div>
+                ) : folders.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500">
+                    아직 만든 폴더가 없습니다. 위 입력창에서 폴더를 추가하세요.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    {folders.map((folder) => {
+                      const isActive = selectedFolderId === folder.id
+                      const count = Number(folder.item_count || 0)
+
+                      return (
+                        <button
+                          key={folder.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedFolderId(folder.id)
+                            setPage(1)
+                            setSelectedResultIds([])
+                          }}
+                          className={`group min-h-[112px] rounded-2xl border p-4 text-left shadow-sm transition ${
+                            isActive
+                              ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
+                              : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/40 hover:shadow-md'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="line-clamp-2 text-base font-extrabold leading-6 text-slate-900">
+                                {folder.name}
+                              </p>
+                              {folder.description && (
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                  {folder.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <span
+                              className={`shrink-0 rounded-full px-3 py-1 text-xs font-extrabold ${
+                                isActive
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-700'
+                              }`}
+                            >
+                              {isActive ? '선택됨' : '보기'}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 flex items-end justify-between">
+                            <div>
+                              <p className="text-[11px] font-semibold text-slate-400">담긴 결과</p>
+                              <p className="mt-1 text-3xl font-black tracking-tight text-slate-900">
+                                {count.toLocaleString()}
+                                <span className="ml-1 text-sm font-bold text-slate-500">개</span>
+                              </p>
+                            </div>
+
+                            <div
+                              className={`h-10 w-10 rounded-2xl ${
+                                isActive ? 'bg-indigo-200' : 'bg-slate-100 group-hover:bg-indigo-100'
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             </div>
