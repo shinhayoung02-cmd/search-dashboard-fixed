@@ -60,7 +60,9 @@ export async function GET(request) {
     const folderId = String(searchParams.get('folder_id') || '').trim()
     const keyword = String(searchParams.get('keyword') || '').trim()
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1)
-    const pageSize = 12
+    const requestedPageSize = parseInt(searchParams.get('pageSize') || '12', 10)
+    const pageSize = Math.max(1, Math.min(Number.isNaN(requestedPageSize) ? 12 : requestedPageSize, 1000))
+    const sort = searchParams.get('sort') || 'latest'
     const from = (page - 1) * pageSize
     const to = page * pageSize - 1
 
@@ -79,6 +81,7 @@ export async function GET(request) {
         total: 0,
         page,
         pageSize,
+        sort,
       })
     }
 
@@ -108,6 +111,7 @@ export async function GET(request) {
       total: count || 0,
       page,
       pageSize,
+      sort,
     })
   } catch (error) {
     return json({ ok: false, error: error.message }, { status: 500 })

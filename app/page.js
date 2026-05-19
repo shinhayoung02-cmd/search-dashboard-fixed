@@ -5,6 +5,8 @@ import ResultCard from '@/components/ResultCard'
 import SearchBar from '@/components/SearchBar'
 
 const DB_QUERY_PAGE_SIZE = 1000
+const RESULT_PAGE_SIZE_LATEST = 12
+const RESULT_PAGE_SIZE_CHANNEL = 1000
 
 async function readJsonResponse(res) {
   const text = await res.text()
@@ -252,7 +254,8 @@ export default function Home() {
   const [selectedResultIds, setSelectedResultIds] = useState([])
   const [resultSortMode, setResultSortMode] = useState('latest')
 
-  const totalPages = Math.ceil(total / 12)
+  const currentResultPageSize = resultSortMode === 'channel' ? RESULT_PAGE_SIZE_CHANNEL : RESULT_PAGE_SIZE_LATEST
+  const totalPages = Math.ceil(total / currentResultPageSize)
 
   const selectedCount = selectedUrls.length
   const selectedResultCount = selectedResultIds.length
@@ -305,12 +308,18 @@ export default function Home() {
   }, [targetFolderId])
 
   const fetchResults = useCallback(
-    async (kw = keyword, pg = page) => {
+    async (kw = keyword, pg = page, sortMode = resultSortMode) => {
       setLoading(true)
       setErrorMessage('')
 
       try {
-        const params = new URLSearchParams({ page: String(pg) })
+        const pageSize = sortMode === 'channel' ? RESULT_PAGE_SIZE_CHANNEL : RESULT_PAGE_SIZE_LATEST
+
+        const params = new URLSearchParams({
+          page: String(pg),
+          pageSize: String(pageSize),
+          sort: sortMode,
+        })
         if (kw) params.append('keyword', kw)
 
         const endpoint = selectedFolderId
@@ -331,7 +340,7 @@ export default function Home() {
         setLoading(false)
       }
     },
-    [keyword, page, selectedFolderId]
+    [keyword, page, selectedFolderId, resultSortMode]
   )
 
   useEffect(() => {
@@ -339,13 +348,13 @@ export default function Home() {
   }, [fetchFolders])
 
   useEffect(() => {
-    fetchResults(keyword, page)
-  }, [page, selectedFolderId])
+    fetchResults(keyword, page, resultSortMode)
+  }, [page, selectedFolderId, resultSortMode, fetchResults])
 
   const handleSearch = (kw) => {
     setKeyword(kw)
     setPage(1)
-    fetchResults(kw, 1)
+    fetchResults(kw, 1, resultSortMode)
   }
 
   const handleCreateFolder = async () => {
@@ -771,7 +780,7 @@ export default function Home() {
       }
 
       setMessage(data.message || `본문 수집 완료: ${data.processed_count || 0}개`)
-      fetchResults(keyword, 1)
+      fetchResults(keyword, 1, resultSortMode)
     } catch (err) {
       setErrorMessage(err.message || '본문 수집 중 오류가 발생했습니다.')
     } finally {
@@ -1453,25 +1462,31 @@ export default function Home() {
             <span className="px-2 text-xs font-bold text-slate-500">결과 정렬</span>
             <button
               type="button"
-              onClick={() => setResultSortMode('latest')}
+              onClick={() => {
+                setPage(1)
+                setResultSortMode('latest')
+              }}
               className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
                 resultSortMode === 'latest'
                   ? 'bg-slate-900 text-white'
                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              최신순
+              수집 최신순
             </button>
             <button
               type="button"
-              onClick={() => setResultSortMode('channel')}
+              onClick={() => {
+                setPage(1)
+                setResultSortMode('channel')
+              }}
               className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
                 resultSortMode === 'channel'
                   ? 'bg-slate-900 text-white'
                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              채널순
+              채널별 묶음
             </button>
           </div>
         </div>
@@ -1532,6 +1547,9 @@ export default function Home() {
           </section>
         ) : (
           <div className="space-y-12">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+              채널별 묶음은 현재 조건에서 불러온 최대 1,000개 결과를 URL 기준으로 판별해 당근 → 네이버 카페 → 클리앙 → 중고나라 → 번개장터 → 기타 순서로 모아 보여줍니다.
+            </div>
             {groupedResults.map((group) => (
               <section key={group.key} className="space-y-4">
                 <div className={`flex items-end justify-between border-b pb-2 ${group.meta.headerClass}`}>
