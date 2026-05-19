@@ -152,11 +152,35 @@ export default function Home() {
   const [manualUrls, setManualUrls] = useState('')
   const [crawlLoading, setCrawlLoading] = useState(false)
 
+  const [folders, setFolders] = useState([])
+  const [foldersLoading, setFoldersLoading] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [newFolderDescription, setNewFolderDescription] = useState('')
+  const [selectedFolderId, setSelectedFolderId] = useState('')
+  const [targetFolderId, setTargetFolderId] = useState('')
+  const [folderActionLoading, setFolderActionLoading] = useState(false)
+  const [selectedResultIds, setSelectedResultIds] = useState([])
+
   const totalPages = Math.ceil(total / 12)
 
   const selectedCount = selectedUrls.length
+  const selectedResultCount = selectedResultIds.length
   const manualUrlCount = useMemo(() => splitUrls(manualUrls).length, [manualUrls])
   const groupedResults = useMemo(() => groupResultsBySite(results), [results])
+  const activeFolder = useMemo(
+    () => folders.find((folder) => String(folder.id) === String(selectedFolderId)) || null,
+    [folders, selectedFolderId]
+  )
+  const targetFolder = useMemo(
+    () => folders.find((folder) => String(folder.id) === String(targetFolderId)) || null,
+    [folders, targetFolderId]
+  )
+  const visibleResultIds = useMemo(
+    () => results.map((item) => item.id).filter(Boolean),
+    [results]
+  )
+  const allVisibleResultsSelected =
+    visibleResultIds.length > 0 && visibleResultIds.every((id) => selectedResultIds.includes(id))
 
   const currentQueryListTitle =
     queryMode === 'raw'
@@ -168,6 +192,26 @@ export default function Home() {
       ? '정보찾아줌에서 Supabase 저장한 원본 쿼리입니다. 클릭하면 단일 쿼리 입력창에 적용됩니다.'
       : '정제 후 대표 쿼리 만들기를 통해 생성된 대표 쿼리입니다. 클릭하면 단일 쿼리 입력창에 적용됩니다.'
 
+  const fetchFolders = useCallback(async () => {
+    setFoldersLoading(true)
+
+    try {
+      const res = await fetch('/api/folders')
+      const data = await readJsonResponse(res)
+      const rows = data.folders || []
+
+      setFolders(rows)
+
+      if (!targetFolderId && rows.length > 0) {
+        setTargetFolderId(rows[0].id)
+      }
+    } catch (err) {
+      setErrorMessage(err.message || '폴더 목록을 불러오지 못했습니다.')
+    } finally {
+      setFoldersLoading(false)
+    }
+  }, [targetFolderId])
+
   const fetchResults = useCallback(
     async (kw = keyword, pg = page) => {
       setLoading(true)
@@ -177,11 +221,16 @@ export default function Home() {
         const params = new URLSearchParams({ page: String(pg) })
         if (kw) params.append('keyword', kw)
 
-        const res = await fetch(`/api/results?${params.toString()}`)
+        const endpoint = selectedFolderId
+          ? `/api/folders/items?folder_id=${encodeURIComponent(selectedFolderId)}&${params.toString()}`
+          : `/api/results?${params.toString()}`
+
+        const res = await fetch(endpoint)
         const data = await readJsonResponse(res)
 
         setResults(data.results || [])
         setTotal(data.total || 0)
+        setSelectedResultIds([])
       } catch (err) {
         setResults([])
         setTotal(0)
@@ -190,17 +239,194 @@ export default function Home() {
         setLoading(false)
       }
     },
-    [keyword, page]
+    [keyword, page, selectedFolderId]
   )
 
   useEffect(() => {
+    fetchFolders()
+  }, [fetchFolders])
+
+  useEffect(() => {
     fetchResults(keyword, page)
-  }, [page])
+  }, [page, selectedFolderId])
 
   const handleSearch = (kw) => {
     setKeyword(kw)
     setPage(1)
     fetchResults(kw, 1)
+  }
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim()
+
+    if (!name) {
+      setErrorMessage('폴더명을 입력하세요.')
+      return
+    }
+
+    setFolderActionLoading(true)
+    setMessage('')
+    setErrorMessage('')
+
+    try {
+      const res = await fetch('/api/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description: newFolderDescription.trim(),
+        }),
+      })
+
+      const data = await readJsonResponse(res)
+
+      setNewFolderName('')
+      setNewFolderDescription('')
+      setTargetFolderId(data.folder?.id || '')
+      setMessage(`폴더를 만들었습니다: ${data.folder?.name || name}`)
+      await fetchFolders()
+    } catch (err) {
+      setErrorMessage(err.message || '폴더를 만들지 못했습니다.')
+    } finally {
+      setFolderActionLoading(false)
+    }
+  }
+
+  const handleDeleteFolder = async () => {
+    if (!selectedFolderId || !activeFolder) {
+      setErrorMessage('삭제할 폴더를 선택하세요.')
+      return
+    }
+
+    const ok = window.confirm(`“${activeFolder.name}” 폴더를 삭제할까요? 폴더 연결만 삭제되고 결과 카드는 삭제되지 않습니다.`)
+    if (!ok) return
+
+    setFolderActionLoading(true)
+    setMessage('')
+    setErrorMessage('')
+
+    try {
+      const res = await fetch(`/api/folders?id=${encodeURIComponent(selectedFolderId)}`, {
+        method: 'DELETE',
+      })
+
+      const data = await readJsonResponse(res)
+
+      setSelectedFolderId('')
+      if (targetFolderId === selectedFolderId) setTargetFolderId('')
+      setSelectedResultIds([])
+      setPage(1)
+      setMessage(data.message || '폴더를 삭제했습니다.')
+      await fetchFolders()
+      await fetchResults(keyword, 1)
+    } catch (err) {
+      setErrorMessage(err.message || '폴더를 삭제하지 못했습니다.')
+    } finally {
+      setFolderActionLoading(false)
+    }
+  }
+
+  const toggleResultSelection = (resultId) => {
+    if (!resultId) return
+
+    setSelectedResultIds((prev) =>
+      prev.includes(resultId)
+        ? prev.filter((id) => id !== resultId)
+        : [...prev, resultId]
+    )
+  }
+
+  const toggleVisibleResults = () => {
+    if (allVisibleResultsSelected) {
+      setSelectedResultIds((prev) =>
+        prev.filter((id) => !visibleResultIds.includes(id))
+      )
+      return
+    }
+
+    setSelectedResultIds((prev) =>
+      Array.from(new Set([...prev, ...visibleResultIds]))
+    )
+  }
+
+  const handleAddSelectedToFolder = async () => {
+    const folderId = targetFolderId
+
+    if (!folderId) {
+      setErrorMessage('결과를 넣을 폴더를 선택하세요.')
+      return
+    }
+
+    if (selectedResultIds.length === 0) {
+      setErrorMessage('폴더에 넣을 결과 카드를 선택하세요.')
+      return
+    }
+
+    setFolderActionLoading(true)
+    setMessage('')
+    setErrorMessage('')
+
+    try {
+      const res = await fetch('/api/folders/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folder_id: folderId,
+          result_ids: selectedResultIds,
+        }),
+      })
+
+      const data = await readJsonResponse(res)
+
+      setMessage(
+        data.message ||
+          `선택한 결과 ${selectedResultIds.length}개를 “${targetFolder?.name || '선택 폴더'}”에 추가했습니다.`
+      )
+      setSelectedResultIds([])
+      await fetchFolders()
+    } catch (err) {
+      setErrorMessage(err.message || '선택 결과를 폴더에 추가하지 못했습니다.')
+    } finally {
+      setFolderActionLoading(false)
+    }
+  }
+
+  const handleRemoveSelectedFromFolder = async () => {
+    if (!selectedFolderId) {
+      setErrorMessage('폴더 보기 상태에서만 제거할 수 있습니다.')
+      return
+    }
+
+    if (selectedResultIds.length === 0) {
+      setErrorMessage('폴더에서 제거할 결과 카드를 선택하세요.')
+      return
+    }
+
+    setFolderActionLoading(true)
+    setMessage('')
+    setErrorMessage('')
+
+    try {
+      const res = await fetch('/api/folders/items', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folder_id: selectedFolderId,
+          result_ids: selectedResultIds,
+        }),
+      })
+
+      const data = await readJsonResponse(res)
+
+      setMessage(data.message || `선택한 결과 ${selectedResultIds.length}개를 폴더에서 제거했습니다.`)
+      setSelectedResultIds([])
+      await fetchFolders()
+      await fetchResults(keyword, page)
+    } catch (err) {
+      setErrorMessage(err.message || '선택 결과를 폴더에서 제거하지 못했습니다.')
+    } finally {
+      setFolderActionLoading(false)
+    }
   }
 
   const applyFirstQueryToInput = (rows = []) => {
@@ -880,6 +1106,162 @@ export default function Home() {
             </div>
           </section>
 
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">결과 폴더</h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    수집된 결과 카드를 선택해서 폴더에 분류합니다. 폴더 삭제는 분류 연결만 지우며, 원본 결과 카드는 유지됩니다.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleVisibleResults}
+                    disabled={visibleResultIds.length === 0}
+                    className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
+                  >
+                    {allVisibleResultsSelected ? '현재 화면 선택 해제' : '현재 화면 전체 선택'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedResultIds([])}
+                    disabled={selectedResultCount === 0}
+                    className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
+                  >
+                    선택 초기화
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr_auto]">
+                <input
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="새 폴더명 예: RQ2 식별 단서"
+                  className="rounded-xl border px-3 py-2 text-sm"
+                />
+
+                <input
+                  value={newFolderDescription}
+                  onChange={(e) => setNewFolderDescription(e.target.value)}
+                  placeholder="폴더 설명 선택 입력"
+                  className="rounded-xl border px-3 py-2 text-sm"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleCreateFolder}
+                  disabled={folderActionLoading || !newFolderName.trim()}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                >
+                  폴더 추가
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr_auto_auto]">
+                <label className="text-sm text-slate-600">
+                  폴더별 보기
+                  <select
+                    value={selectedFolderId}
+                    onChange={(e) => {
+                      setSelectedFolderId(e.target.value)
+                      setSelectedResultIds([])
+                      setPage(1)
+                    }}
+                    className="mt-1 block w-full rounded-xl border px-3 py-2"
+                  >
+                    <option value="">전체 결과 보기</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.name} ({folder.item_count || 0})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-600">
+                  선택 결과를 넣을 폴더
+                  <select
+                    value={targetFolderId}
+                    onChange={(e) => setTargetFolderId(e.target.value)}
+                    className="mt-1 block w-full rounded-xl border px-3 py-2"
+                  >
+                    <option value="">폴더 선택</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.name} ({folder.item_count || 0})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleAddSelectedToFolder}
+                  disabled={folderActionLoading || selectedResultCount === 0 || !targetFolderId}
+                  className="self-end rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                >
+                  선택 {selectedResultCount}개 폴더에 넣기
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveSelectedFromFolder}
+                  disabled={folderActionLoading || selectedResultCount === 0 || !selectedFolderId}
+                  className="self-end rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-40"
+                >
+                  선택 항목 폴더에서 제거
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {foldersLoading ? (
+                  <span className="rounded-full border bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+                    폴더 불러오는 중...
+                  </span>
+                ) : folders.length === 0 ? (
+                  <span className="rounded-full border bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+                    아직 만든 폴더가 없습니다.
+                  </span>
+                ) : (
+                  folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedFolderId(folder.id)
+                        setPage(1)
+                        setSelectedResultIds([])
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                        selectedFolderId === folder.id
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                          : 'bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {folder.name} · {folder.item_count || 0}개
+                    </button>
+                  ))
+                )}
+
+                {selectedFolderId && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteFolder}
+                    disabled={folderActionLoading}
+                    className="rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-40"
+                  >
+                    현재 폴더 삭제
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
           {message && (
             <div className="rounded-xl border-l-4 border-indigo-400 bg-white px-4 py-3 text-sm text-gray-700 shadow">
               {message}
@@ -893,7 +1275,17 @@ export default function Home() {
           )}
         </div>
 
-        <p className="mb-4 text-sm text-gray-500">총 {total}개 결과</p>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-gray-500">
+            {activeFolder ? `“${activeFolder.name}” 폴더 결과 ${total}개` : `총 ${total}개 결과`}
+          </p>
+
+          {selectedResultCount > 0 && (
+            <p className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+              결과 카드 {selectedResultCount}개 선택됨
+            </p>
+          )}
+        </div>
 
         {loading ? (
           <div className="py-20 text-center text-lg text-gray-400">불러오는 중...</div>
@@ -921,7 +1313,24 @@ export default function Home() {
 
                 <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                   {group.items.map((item) => (
-                    <div key={item.id || item.url} className="min-w-0 w-full">
+                    <div
+                      key={item.id || item.url}
+                      className={`min-w-0 w-full rounded-2xl border p-2 transition ${
+                        selectedResultIds.includes(item.id)
+                          ? 'border-indigo-300 bg-indigo-50/40'
+                          : 'border-transparent'
+                      }`}
+                    >
+                      <label className="mb-2 flex cursor-pointer items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedResultIds.includes(item.id)}
+                          onChange={() => toggleResultSelection(item.id)}
+                          disabled={!item.id}
+                        />
+                        <span>이 결과 카드 선택</span>
+                      </label>
+
                       <ResultCard item={item} />
                     </div>
                   ))}
