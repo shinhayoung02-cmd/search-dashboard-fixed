@@ -35,13 +35,24 @@ function splitUrls(text = '') {
 }
 
 function getSiteKey(item = {}) {
-  const source = String(item.source || item.site || item.url || '').toLowerCase()
+  const source = [
+    item.source,
+    item.site,
+    item.url,
+    item.source_url,
+    item.display_link,
+    item.keyword,
+    item.title,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 
-  if (source.includes('daangn')) return 'daangn'
-  if (source.includes('cafe.naver')) return 'naverCafe'
-  if (source.includes('clien')) return 'clien'
-  if (source.includes('joongna')) return 'joongna'
-  if (source.includes('bunjang')) return 'bunjang'
+  if (source.includes('daangn') || source.includes('당근')) return 'daangn'
+  if (source.includes('cafe.naver') || source.includes('네이버 카페') || source.includes('네이버카페')) return 'naverCafe'
+  if (source.includes('clien') || source.includes('클리앙')) return 'clien'
+  if (source.includes('joongna') || source.includes('중고나라')) return 'joongna'
+  if (source.includes('bunjang') || source.includes('번개장터')) return 'bunjang'
 
   return 'etc'
 }
@@ -66,6 +77,8 @@ function openGoogleSearch(query = '') {
   const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`
   window.open(url, '_blank', 'noopener,noreferrer')
 }
+
+const CHANNEL_ORDER = ['daangn', 'naverCafe', 'clien', 'joongna', 'bunjang', 'etc']
 
 const SITE_META = {
   daangn: {
@@ -101,8 +114,6 @@ const SITE_META = {
 }
 
 function groupResultsBySite(items = []) {
-  const order = ['daangn', 'naverCafe', 'clien', 'joongna', 'bunjang', 'etc']
-
   const grouped = items.reduce((acc, item) => {
     const key = getSiteKey(item)
     if (!acc[key]) acc[key] = []
@@ -110,7 +121,7 @@ function groupResultsBySite(items = []) {
     return acc
   }, {})
 
-  return order
+  return CHANNEL_ORDER
     .filter((key) => grouped[key]?.length > 0)
     .map((key) => ({
       key,
@@ -120,12 +131,14 @@ function groupResultsBySite(items = []) {
 }
 
 function getResultTime(item = {}) {
+  // 최신순은 사용자가 대시보드에 넣은 순서, 즉 Supabase results.created_at을 우선 기준으로 봅니다.
+  // 원본 게시물 날짜는 created_at이 없을 때만 보조 기준으로 사용합니다.
   const candidates = [
+    item.created_at,
+    item.updated_at,
     item.published_at,
     item.post_date,
     item.article_date,
-    item.created_at,
-    item.updated_at,
   ]
 
   for (const value of candidates) {
@@ -137,9 +150,13 @@ function getResultTime(item = {}) {
   return 0
 }
 
+function getChannelLabel(item = {}) {
+  const key = getSiteKey(item)
+  return SITE_META[key]?.label || SITE_META.etc.label
+}
+
 function sortResults(items = [], mode = 'latest') {
-  const siteOrder = ['daangn', 'naverCafe', 'clien', 'joongna', 'bunjang', 'etc']
-  const siteRank = new Map(siteOrder.map((key, index) => [key, index]))
+  const siteRank = new Map(CHANNEL_ORDER.map((key, index) => [key, index]))
 
   return [...items].sort((a, b) => {
     if (mode === 'channel') {
@@ -1435,8 +1452,8 @@ export default function Home() {
           <section className="space-y-4">
             <div className="flex items-end justify-between border-b border-slate-200 pb-2">
               <div>
-                <h2 className="text-xl font-extrabold tracking-tight text-gray-900">최신순 결과</h2>
-                <p className="mt-1 text-xs text-gray-500">수집·게시 날짜 기준으로 최근 결과를 먼저 보여줍니다.</p>
+                <h2 className="text-xl font-extrabold tracking-tight text-gray-900">수집 최신순 결과</h2>
+                <p className="mt-1 text-xs text-gray-500">Supabase에 저장된 created_at 기준으로 최근에 넣은 결과를 먼저 보여줍니다.</p>
               </div>
 
               <div className="text-sm font-semibold text-gray-400">
@@ -1467,8 +1484,8 @@ export default function Home() {
                         />
                         <span>이 결과 카드 선택</span>
                       </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-500">
-                        {siteMeta.label}
+                      <span className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-bold text-white">
+                        채널 · {siteMeta.label}
                       </span>
                     </label>
 
@@ -1505,14 +1522,19 @@ export default function Home() {
                           : 'border-transparent'
                       }`}
                     >
-                      <label className="mb-2 flex cursor-pointer items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-                        <input
-                          type="checkbox"
-                          checked={selectedResultIds.includes(item.id)}
-                          onChange={() => toggleResultSelection(item.id)}
-                          disabled={!item.id}
-                        />
-                        <span>이 결과 카드 선택</span>
+                      <label className="mb-2 flex cursor-pointer items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedResultIds.includes(item.id)}
+                            onChange={() => toggleResultSelection(item.id)}
+                            disabled={!item.id}
+                          />
+                          <span>이 결과 카드 선택</span>
+                        </span>
+                        <span className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-bold text-white">
+                          채널 · {getChannelLabel(item)}
+                        </span>
                       </label>
 
                       <ResultCard item={item} />
